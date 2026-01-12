@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  BPI
+  KADIV
+  ANGGOTA
+}
+
+enum EventType {
+  PERIODIC
+  PROKER
+}
+
+model Period {
+  id        String   @id @default(uuid())
+  name      String
+  isActive  Boolean  @default(false)
+  startYear Int
+  endYear   Int
+
+  users     User[]
+  events    EvaluationEvent[]
+  prokers   Proker[]
+
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id         String   @id @default(uuid())
+  nim        String   @unique
+  name       String
+  email      String?
+  role       Role
+  isActive   Boolean  @default(true)
+  passwordHash String
+  passwordUpdatedAt DateTime?
+
+  periodId   String
+  period     Period   @relation(fields: [periodId], references: [id])
+
+  divisionId String?
+  division   Division? @relation(fields: [divisionId], references: [id])
+
+  panitia    Panitia[]
+
+  evaluationsGiven    Evaluation[] @relation("Evaluator")
+  evaluationsReceived Evaluation[] @relation("Evaluatee")
+
+  auditLogs AuditLog[]
+
+  createdAt DateTime @default(now())
+}
+
+model Division {
+  id        String   @id @default(uuid())
+  name      String
+
+  users     User[]
+  prokers   Proker[]
+
+  createdAt DateTime @default(now())
+}
+
+model Proker {
+  id          String   @id @default(uuid())
+  name        String
+  divisionId  String
+  division    Division @relation(fields: [divisionId], references: [id])
+
+  periodId    String
+  period      Period   @relation(fields: [periodId], references: [id])
+
+  panitia     Panitia[]
+  events      EvaluationEvent[]
+
+  createdAt   DateTime @default(now())
+}
+
+model Panitia {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  prokerId  String
+  proker    Proker   @relation(fields: [prokerId], references: [id])
+}
+
+model EvaluationEvent {
+  id        String    @id @default(uuid())
+  name      String
+  type      EventType
+  isOpen    Boolean   @default(true)
+  startDate DateTime
+  endDate   DateTime
+
+  periodId  String
+  period    Period    @relation(fields: [periodId], references: [id])
+
+  prokerId  String?
+  proker    Proker?   @relation(fields: [prokerId], references: [id])
+
+  indicators  IndicatorSnapshot[]
+  evaluations Evaluation[]
+
+  createdAt DateTime @default(now())
+}
+
+model Indicator {
+  id        String   @id @default(uuid())
+  name      String
+  category  String
+  isActive  Boolean @default(true)
+
+  snapshots IndicatorSnapshot[]
+
+  createdAt DateTime @default(now())
+}
+
+model IndicatorSnapshot {
+  id          String   @id @default(uuid())
+  indicatorId String
+  indicator   Indicator @relation(fields: [indicatorId], references: [id])
+
+  eventId     String
+  event       EvaluationEvent @relation(fields: [eventId], references: [id])
+
+  scores      EvaluationScore[]
+}
+
+model Evaluation {
+  id          String   @id @default(uuid())
+
+  evaluatorId String
+  evaluator   User     @relation("Evaluator", fields: [evaluatorId], references: [id])
+
+  evaluateeId String
+  evaluatee   User     @relation("Evaluatee", fields: [evaluateeId], references: [id])
+
+  eventId     String
+  event       EvaluationEvent @relation(fields: [eventId], references: [id])
+
+  scores      EvaluationScore[]
+  feedback    String?
+
+  createdAt   DateTime @default(now())
+
+  @@unique([evaluatorId, evaluateeId, eventId])
+}
+
+model EvaluationScore {
+  id          String   @id @default(uuid())
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id])
+
+  indicatorSnapshotId String
+  indicatorSnapshot   IndicatorSnapshot @relation(fields: [indicatorSnapshotId], references: [id])
+
+  score       Int
+
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  success   Boolean
+  ip        String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([userId])
+}

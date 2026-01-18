@@ -1,54 +1,49 @@
-import Link from "next/link";
+import React from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
+
+import { ConfirmForm } from "@/components/confirm-form";
+import { SidebarShell } from "@/components/sidebar-shell";
+import { SiteHeader } from "@/components/site-header";
+import { SuccessAlert } from "@/components/success-alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
 import { createDivisionSchema } from "@/lib/validation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ConfirmForm } from "@/components/confirm-form";
+
 type DivisionsPageProps = { searchParams: Promise<Record<string, string | undefined>> };
 
 export default async function DivisionsPage({ searchParams }: DivisionsPageProps) {
   const params = await searchParams;
   const session = await getSession();
-  if (!session) {
-    redirect("/");
-  }
-  if (!canManageRoles(session.role)) {
-    redirect("/dashboard");
-  }
+  if (!session) redirect("/login");
+  if (!canManageRoles(session.role)) redirect("/dashboard");
 
   async function createDivision(formData: FormData) {
     "use server";
     const session = await getSession();
-    if (!session) {
-      redirect("/");
-    }
-    if (!canManageRoles(session.role)) {
-      redirect("/dashboard");
-    }
+    if (!session) redirect("/login");
+    if (!canManageRoles(session.role)) redirect("/dashboard");
 
-    const raw = {
-      name: String(formData.get("name") ?? ""),
-    };
-
+    const raw = { name: String(formData.get("name") ?? "") };
     const parsed = createDivisionSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error("Input tidak valid");
-    }
+    if (!parsed.success) throw new Error("Input tidak valid");
 
     await prisma.division.create({ data: parsed.data });
-
     revalidatePath("/dashboard/divisions");
-    redirect("/dashboard/divisions?success=Divisi%20ditambahkan");
+    redirect(`/dashboard/divisions?success=${encodeURIComponent("Divisi ditambahkan")}&alert=success`);
   }
 
   async function updateDivision(formData: FormData) {
     "use server";
     const session = await getSession();
-    if (!session) redirect("/");
+    if (!session) redirect("/login");
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
@@ -58,98 +53,170 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
 
     await prisma.division.update({ where: { id }, data: parsed.data });
     revalidatePath("/dashboard/divisions");
-    redirect("/dashboard/divisions?success=Divisi%20diperbarui");
+    redirect(`/dashboard/divisions?success=${encodeURIComponent("Divisi diperbarui")}&alert=success`);
   }
 
   async function deleteDivision(formData: FormData) {
     "use server";
     const session = await getSession();
-    if (!session) redirect("/");
+    if (!session) redirect("/login");
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
     await prisma.division.delete({ where: { id } });
     revalidatePath("/dashboard/divisions");
-    redirect("/dashboard/divisions?success=Divisi%20dihapus");
+    redirect(`/dashboard/divisions?success=${encodeURIComponent("Divisi dihapus")}&alert=success`);
   }
 
-  const divisions = await prisma.division.findMany({ orderBy: { name: "asc" } });
-  const success = params?.success;
+  const [activePeriod, divisions, currentUser] = await Promise.all([
+    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
+    prisma.division.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { users: true } } } }),
+    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+  ]);
+
+  const success = params?.success ? decodeURIComponent(params.success) : undefined;
+  const alert = params?.alert;
+
+  const totalDivisions = divisions.length;
+  const totalUsers = divisions.reduce((sum, d) => sum + d._count.users, 0);
+
+  const sidebarStyle = {
+    "--sidebar-width": "calc(var(--spacing) * 72)",
+    "--header-height": "calc(var(--spacing) * 12)",
+  } as React.CSSProperties;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Konfigurasi dasar</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Divisi</h1>
-            <p className="text-sm text-slate-600 mt-1">Atur daftar divisi untuk dikaitkan dengan user dan proker.</p>
+    <SidebarShell user={currentUser ? { name: currentUser.name, email: currentUser.email ?? undefined } : undefined} sidebarStyle={sidebarStyle}>
+      <SiteHeader title="Divisi" activePeriod={activePeriod?.name ?? "-"} />
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+          <SuccessAlert message={success} type={alert === "error" ? "error" : "success"} />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-xl font-semibold">Divisi</h1>
+              <p className="text-muted-foreground text-sm">Atur daftar divisi untuk user dan proker.</p>
+            </div>
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button>Tambah Divisi</Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="sm:max-w-md">
+                <SheetHeader>
+                  <SheetTitle>Tambah Divisi</SheetTitle>
+                  <SheetDescription>Masukkan nama divisi baru.</SheetDescription>
+                </SheetHeader>
+                <form action={createDivision} className="grid gap-3 p-4 pt-0">
+                  <label className="text-sm font-medium text-foreground">
+                    Nama
+                    <Input name="name" placeholder="BPI" required className="mt-1" />
+                  </label>
+                  <Button type="submit" className="mt-2">
+                    Simpan
+                  </Button>
+                </form>
+              </SheetContent>
+            </Sheet>
           </div>
-          <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-            Kembali
-          </Link>
-        </div>
 
-        {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{decodeURIComponent(success)}</div>}
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Tambah Divisi</h2>
-          <form action={createDivision} className="mt-4 grid gap-4 sm:grid-cols-2 sm:items-end">
-            <div className="sm:col-span-2">
-              <label className="text-sm font-medium text-slate-700">Nama</label>
-              <Input name="name" placeholder="BPI" required className="mt-1" />
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit">Simpan</Button>
-            </div>
-          </form>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Daftar Divisi</h2>
-          <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-700">
-                <tr>
-                  <th className="px-4 py-3">Nama</th>
-                  <th className="px-4 py-3">Dibuat</th>
-                  <th className="px-4 py-3">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {divisions.map((division) => (
-                  <tr key={division.id} className="align-top hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{division.name}</td>
-                    <td className="px-4 py-3 text-slate-700">{new Date(division.createdAt).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 space-y-2">
-                      <form action={updateDivision} className="space-y-2 rounded-lg border border-slate-200 p-3">
-                        <input type="hidden" name="id" value={division.id} />
-                        <Input name="name" defaultValue={division.name} required />
-                        <Button type="submit" variant="outline" className="w-full sm:w-auto">
-                          Simpan
-                        </Button>
-                      </form>
-                      <ConfirmForm action={deleteDivision}>
-                        <input type="hidden" name="id" value={division.id} />
-                        <Button type="submit" variant="ghost" className="text-red-600 hover:text-red-700">
-                          Hapus
-                        </Button>
-                      </ConfirmForm>
-                    </td>
-                  </tr>
+          <Card className="border-primary/10">
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-xl font-semibold">Ringkasan Divisi</CardTitle>
+                <p className="text-muted-foreground text-sm">Status periode aktif dan distribusi anggota.</p>
+              </div>
+              {activePeriod ? <Badge variant="outline">Aktif: {activePeriod.name}</Badge> : <Badge variant="outline">Belum ada yang aktif</Badge>}
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { label: "Total Divisi", value: totalDivisions },
+                  { label: "Total Anggota", value: totalUsers },
+                  { label: "Rata-rata/Divisi", value: totalDivisions ? Math.round(totalUsers / totalDivisions) : 0 },
+                ].map((stat) => (
+                  <div key={stat.label} className="border-border/60 bg-card/60 rounded-lg border px-3 py-3 shadow-xs">
+                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{stat.label}</p>
+                    <p className="text-2xl font-semibold tabular-nums">{stat.value}</p>
+                  </div>
                 ))}
-                {divisions.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
-                      Belum ada divisi.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Daftar Divisi</CardTitle>
+                <p className="text-muted-foreground text-sm">Kelola nama divisi dan anggota terkait.</p>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table className="min-w-full">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-4">Nama</TableHead>
+                      <TableHead>Anggota</TableHead>
+                      <TableHead>Dibuat</TableHead>
+                      <TableHead className="w-[180px] pr-4 text-center">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {divisions.map((division) => (
+                      <TableRow key={division.id}>
+                        <TableCell className="pl-4 font-medium">{division.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{division._count.users} anggota</TableCell>
+                        <TableCell className="text-muted-foreground">{new Date(division.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell className="pr-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Sheet>
+                              <SheetTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  Edit
+                                </Button>
+                              </SheetTrigger>
+                              <SheetContent side="right" className="sm:max-w-md">
+                                <SheetHeader>
+                                  <SheetTitle>Edit Divisi</SheetTitle>
+                                  <SheetDescription>Perbarui nama divisi.</SheetDescription>
+                                </SheetHeader>
+                                <form action={updateDivision} className="grid gap-3 p-4 pt-0">
+                                  <input type="hidden" name="id" value={division.id} />
+                                  <label className="text-sm font-medium text-foreground">
+                                    Nama
+                                    <Input name="name" defaultValue={division.name} required className="mt-1" />
+                                  </label>
+                                  <Button type="submit" className="mt-2">
+                                    Simpan
+                                  </Button>
+                                </form>
+                              </SheetContent>
+                            </Sheet>
+
+                            <ConfirmForm action={deleteDivision}>
+                              <input type="hidden" name="id" value={division.id} />
+                              <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                Hapus
+                              </Button>
+                            </ConfirmForm>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {divisions.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                          Belum ada divisi.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div>
+    </SidebarShell>
   );
 }

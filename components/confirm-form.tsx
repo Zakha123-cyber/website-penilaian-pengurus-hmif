@@ -11,7 +11,6 @@ export function ConfirmForm({ message = "Yakin ingin menghapus?", onSubmit, ...p
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     const form = event.currentTarget;
 
-    // Skip prompt on the follow-up submit we trigger programmatically.
     if (form.dataset.confirmed === "true") {
       form.dataset.confirmed = "";
       onSubmit?.(event);

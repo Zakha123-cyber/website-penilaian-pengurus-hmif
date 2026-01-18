@@ -1,34 +1,35 @@
-import Link from "next/link";
+import React from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
+
+import { ConfirmForm } from "@/components/confirm-form";
+import { SidebarShell } from "@/components/sidebar-shell";
+import { SiteHeader } from "@/components/site-header";
+import { SuccessAlert } from "@/components/success-alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
+import { prisma } from "@/lib/prisma";
 import { createPeriodSchema } from "@/lib/validation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ConfirmForm } from "@/components/confirm-form";
+
 type PeriodsPageProps = { searchParams: Promise<Record<string, string | undefined>> };
 
 export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
   const params = await searchParams;
   const session = await getSession();
-  if (!session) {
-    redirect("/");
-  }
-  if (!canManageRoles(session.role)) {
-    redirect("/dashboard");
-  }
+  if (!session) redirect("/login");
+  if (!canManageRoles(session.role)) redirect("/dashboard");
 
   async function createPeriod(formData: FormData) {
     "use server";
     const session = await getSession();
-    if (!session) {
-      redirect("/");
-    }
-    if (!canManageRoles(session.role)) {
-      redirect("/dashboard");
-    }
+    if (!session) redirect("/login");
+    if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const raw = {
       name: String(formData.get("name") ?? ""),
@@ -38,26 +39,21 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
     };
 
     const parsed = createPeriodSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error("Input tidak valid");
-    }
+    if (!parsed.success) throw new Error("Input tidak valid");
 
     const { name, startYear, endYear, isActive } = parsed.data;
 
-    if (isActive) {
-      await prisma.period.updateMany({ data: { isActive: false } });
-    }
+    if (isActive) await prisma.period.updateMany({ data: { isActive: false } });
 
     await prisma.period.create({ data: { name, startYear, endYear, isActive } });
-
     revalidatePath("/dashboard/periods");
-    redirect("/dashboard/periods?success=Periode%20ditambahkan");
+    redirect(`/dashboard/periods?success=${encodeURIComponent("Periode ditambahkan")}&alert=success`);
   }
 
   async function updatePeriod(formData: FormData) {
     "use server";
     const session = await getSession();
-    if (!session) redirect("/");
+    if (!session) redirect("/login");
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
@@ -69,139 +65,207 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
     };
 
     const parsed = createPeriodSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new Error("Input tidak valid");
-    }
+    if (!parsed.success) throw new Error("Input tidak valid");
 
     const { name, startYear, endYear, isActive } = parsed.data;
 
-    if (isActive) {
-      await prisma.period.updateMany({ data: { isActive: false } });
-    }
+    if (isActive) await prisma.period.updateMany({ data: { isActive: false } });
 
-    await prisma.period.update({
-      where: { id },
-      data: { name, startYear, endYear, isActive },
-    });
-
+    await prisma.period.update({ where: { id }, data: { name, startYear, endYear, isActive } });
     revalidatePath("/dashboard/periods");
-    redirect("/dashboard/periods?success=Periode%20diperbarui");
+    redirect(`/dashboard/periods?success=${encodeURIComponent("Periode diperbarui")}&alert=success`);
   }
 
   async function deletePeriod(formData: FormData) {
     "use server";
     const session = await getSession();
-    if (!session) redirect("/");
+    if (!session) redirect("/login");
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
     await prisma.period.delete({ where: { id } });
-
     revalidatePath("/dashboard/periods");
-    redirect("/dashboard/periods?success=Periode%20dihapus");
+    redirect(`/dashboard/periods?success=${encodeURIComponent("Periode dihapus")}&alert=success`);
   }
 
-  const periods = await prisma.period.findMany({ orderBy: { startYear: "desc" } });
-  const success = params?.success;
+  const [activePeriod, periods, currentUser] = await Promise.all([
+    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
+    prisma.period.findMany({ orderBy: { startYear: "desc" } }),
+    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+  ]);
+
+  const success = params?.success ? decodeURIComponent(params.success) : undefined;
+  const alert = params?.alert;
+
+  const totalPeriods = periods.length;
+  const activeCount = periods.filter((p) => p.isActive).length;
+  const inactiveCount = totalPeriods - activeCount;
+
+  const sidebarStyle = {
+    "--sidebar-width": "calc(var(--spacing) * 72)",
+    "--header-height": "calc(var(--spacing) * 12)",
+  } as React.CSSProperties;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Konfigurasi dasar</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Periode</h1>
-            <p className="text-sm text-slate-600 mt-1">Atur periode kepengurusan dan tandai yang sedang aktif.</p>
+    <SidebarShell user={currentUser ? { name: currentUser.name, email: currentUser.email ?? undefined } : undefined} sidebarStyle={sidebarStyle}>
+      <SiteHeader title="Periode" activePeriod={activePeriod?.name ?? "-"} />
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+          <SuccessAlert message={success} type={alert === "error" ? "error" : "success"} />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-xl font-semibold">Periode</h1>
+              <p className="text-muted-foreground text-sm">Atur periode kepengurusan dan tandai yang aktif.</p>
+            </div>
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button>Tambah Periode</Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="sm:max-w-md">
+                <SheetHeader>
+                  <SheetTitle>Tambah Periode</SheetTitle>
+                  <SheetDescription>Masukkan rentang tahun dan status aktif.</SheetDescription>
+                </SheetHeader>
+                <form action={createPeriod} className="grid gap-3 p-4 pt-0">
+                  <label className="text-sm font-medium text-foreground">
+                    Nama
+                    <Input name="name" placeholder="2025/2026" required className="mt-1" />
+                  </label>
+                  <label className="text-sm font-medium text-foreground">
+                    Tahun Mulai
+                    <Input name="startYear" type="number" min={2000} max={3000} required className="mt-1" />
+                  </label>
+                  <label className="text-sm font-medium text-foreground">
+                    Tahun Akhir
+                    <Input name="endYear" type="number" min={2000} max={3000} required className="mt-1" />
+                  </label>
+                  <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
+                    <input name="isActive" type="checkbox" className="h-4 w-4 rounded border-border" />
+                    Jadikan aktif
+                  </label>
+                  <Button type="submit" className="mt-2">
+                    Simpan
+                  </Button>
+                </form>
+              </SheetContent>
+            </Sheet>
           </div>
-          <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-            Kembali
-          </Link>
-        </div>
 
-        {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{decodeURIComponent(success)}</div>}
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Tambah Periode</h2>
-          <form action={createPeriod} className="mt-4 grid gap-4 sm:grid-cols-2 sm:items-end">
-            <div className="sm:col-span-2">
-              <label className="text-sm font-medium text-slate-700">Nama</label>
-              <Input name="name" placeholder="2025/2026" required className="mt-1" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Tahun Mulai</label>
-              <Input name="startYear" type="number" min={2000} max={3000} required className="mt-1" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Tahun Akhir</label>
-              <Input name="endYear" type="number" min={2000} max={3000} required className="mt-1" />
-            </div>
-            <div className="flex items-center gap-2 text-sm text-slate-700">
-              <input id="isActive" name="isActive" type="checkbox" className="h-4 w-4 rounded border-slate-300 text-slate-900" />
-              <label htmlFor="isActive">Jadikan aktif</label>
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit">Simpan</Button>
-            </div>
-          </form>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Daftar Periode</h2>
-          <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-700">
-                <tr>
-                  <th className="px-4 py-3">Nama</th>
-                  <th className="px-4 py-3">Rentang</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {periods.map((period) => (
-                  <tr key={period.id} className="align-top hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{period.name}</td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {period.startYear} - {period.endYear}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">{period.isActive ? "Aktif" : "Nonaktif"}</td>
-                    <td className="px-4 py-3 space-y-2">
-                      <form action={updatePeriod} className="space-y-2 rounded-lg border border-slate-200 p-3">
-                        <input type="hidden" name="id" value={period.id} />
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <Input name="name" defaultValue={period.name} required />
-                          <Input name="startYear" type="number" min={2000} max={3000} defaultValue={period.startYear} required />
-                          <Input name="endYear" type="number" min={2000} max={3000} defaultValue={period.endYear} required />
-                          <label className="flex items-center gap-2 text-sm text-slate-700">
-                            <input name="isActive" type="checkbox" defaultChecked={period.isActive} className="h-4 w-4 rounded border-slate-300 text-slate-900" />
-                            Jadikan aktif
-                          </label>
-                        </div>
-                        <Button type="submit" variant="outline" className="w-full sm:w-auto">
-                          Simpan
-                        </Button>
-                      </form>
-                      <ConfirmForm action={deletePeriod}>
-                        <input type="hidden" name="id" value={period.id} />
-                        <Button type="submit" variant="ghost" className="text-red-600 hover:text-red-700">
-                          Hapus
-                        </Button>
-                      </ConfirmForm>
-                    </td>
-                  </tr>
+          <Card className="border-primary/10">
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-xl font-semibold">Ringkasan Periode</CardTitle>
+                <p className="text-muted-foreground text-sm">Status aktif dan total data yang tersimpan.</p>
+              </div>
+              {activePeriod ? <Badge variant="outline">Aktif: {activePeriod.name}</Badge> : <Badge variant="outline">Belum ada yang aktif</Badge>}
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { label: "Total", value: totalPeriods },
+                  { label: "Aktif", value: activeCount },
+                  { label: "Nonaktif", value: inactiveCount },
+                ].map((stat) => (
+                  <div key={stat.label} className="border-border/60 bg-card/60 rounded-lg border px-3 py-3 shadow-xs">
+                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{stat.label}</p>
+                    <p className="text-2xl font-semibold tabular-nums">{stat.value}</p>
+                  </div>
                 ))}
-                {periods.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
-                      Belum ada periode.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Daftar Periode</CardTitle>
+                <p className="text-muted-foreground text-sm">Kelola rentang tahun dan status aktif.</p>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table className="min-w-full">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-4">Nama</TableHead>
+                      <TableHead>Rentang</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[180px] pr-4 text-center">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periods.map((period) => (
+                      <TableRow key={period.id}>
+                        <TableCell className="pl-4 font-medium">{period.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {period.startYear} - {period.endYear}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={period.isActive ? "default" : "outline"}>{period.isActive ? "Aktif" : "Nonaktif"}</Badge>
+                        </TableCell>
+                        <TableCell className="pr-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Sheet>
+                              <SheetTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  Edit
+                                </Button>
+                              </SheetTrigger>
+                              <SheetContent side="right" className="sm:max-w-md">
+                                <SheetHeader>
+                                  <SheetTitle>Edit Periode</SheetTitle>
+                                  <SheetDescription>Perbarui nama, rentang tahun, atau status aktif.</SheetDescription>
+                                </SheetHeader>
+                                <form action={updatePeriod} className="grid gap-3 p-4 pt-0">
+                                  <input type="hidden" name="id" value={period.id} />
+                                  <label className="text-sm font-medium text-foreground">
+                                    Nama
+                                    <Input name="name" defaultValue={period.name} required className="mt-1" />
+                                  </label>
+                                  <label className="text-sm font-medium text-foreground">
+                                    Tahun Mulai
+                                    <Input name="startYear" type="number" min={2000} max={3000} defaultValue={period.startYear} required className="mt-1" />
+                                  </label>
+                                  <label className="text-sm font-medium text-foreground">
+                                    Tahun Akhir
+                                    <Input name="endYear" type="number" min={2000} max={3000} defaultValue={period.endYear} required className="mt-1" />
+                                  </label>
+                                  <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
+                                    <input name="isActive" type="checkbox" defaultChecked={period.isActive} className="h-4 w-4 rounded border-border" />
+                                    Jadikan aktif
+                                  </label>
+                                  <Button type="submit" className="mt-2">
+                                    Simpan
+                                  </Button>
+                                </form>
+                              </SheetContent>
+                            </Sheet>
+
+                            <ConfirmForm action={deletePeriod}>
+                              <input type="hidden" name="id" value={period.id} />
+                              <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                Hapus
+                              </Button>
+                            </ConfirmForm>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {periods.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                          Belum ada periode.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div>
+    </SidebarShell>
   );
 }

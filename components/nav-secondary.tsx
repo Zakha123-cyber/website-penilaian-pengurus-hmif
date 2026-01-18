@@ -1,42 +1,43 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { type Icon } from "@tabler/icons-react"
+import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { type Icon } from "@tabler/icons-react";
 
-import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar"
+import { SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 
 export function NavSecondary({
   items,
   ...props
 }: {
   items: {
-    title: string
-    url: string
-    icon: Icon
-  }[]
+    title: string;
+    url: string;
+    icon: Icon;
+  }[];
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
+  const pathname = usePathname();
+
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
         <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <a href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </a>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+          {items.map((item) => {
+            const isActive = pathname === item.url || pathname.startsWith(`${item.url}/`);
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton asChild isActive={isActive} aria-current={isActive ? "page" : undefined}>
+                  <Link href={item.url} prefetch={false}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }

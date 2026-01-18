@@ -2,6 +2,8 @@ import React from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import { Pencil, Trash2 } from "lucide-react";
+
 import { ConfirmForm } from "@/components/confirm-form";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SiteHeader } from "@/components/site-header";
@@ -158,7 +160,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
                       <TableHead className="pl-4">Nama</TableHead>
                       <TableHead>Anggota</TableHead>
                       <TableHead>Dibuat</TableHead>
-                      <TableHead className="w-[180px] pr-4 text-center">Aksi</TableHead>
+                      <TableHead className="w-[148px] pr-4 text-center">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -171,8 +173,8 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
                           <div className="flex items-center justify-end gap-2">
                             <Sheet>
                               <SheetTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                  Edit
+                                <Button variant="outline" size="icon" aria-label="Edit divisi">
+                                  <Pencil className="h-4 w-4" />
                                 </Button>
                               </SheetTrigger>
                               <SheetContent side="right" className="sm:max-w-md">
@@ -195,8 +197,8 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
 
                             <ConfirmForm action={deleteDivision}>
                               <input type="hidden" name="id" value={division.id} />
-                              <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                                Hapus
+                              <Button type="submit" variant="ghost" size="icon" aria-label="Hapus divisi" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </ConfirmForm>
                           </div>

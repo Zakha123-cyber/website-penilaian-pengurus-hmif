@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import { Pencil, Trash2 } from "lucide-react";
+
 import { ConfirmForm } from "@/components/confirm-form";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SiteHeader } from "@/components/site-header";
@@ -260,7 +262,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                       <TableHead>Divisi</TableHead>
                       <TableHead>Periode</TableHead>
                       <TableHead>Panitia</TableHead>
-                      <TableHead className="w-[200px] pr-4 text-center">Aksi</TableHead>
+                      <TableHead className="w-[148px] pr-4 text-center">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -279,8 +281,8 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                             <div className="flex items-center justify-end gap-2">
                               <Sheet>
                                 <SheetTrigger asChild>
-                                  <Button variant="outline" size="sm">
-                                    Edit
+                                  <Button variant="outline" size="icon" aria-label="Edit proker">
+                                    <Pencil className="h-4 w-4" />
                                   </Button>
                                 </SheetTrigger>
                                 <SheetContent side="right" className="sm:max-w-xl">
@@ -363,8 +365,8 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
 
                               <ConfirmForm action={deleteProker}>
                                 <input type="hidden" name="id" value={proker.id} />
-                                <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                                  Hapus
+                                <Button type="submit" variant="ghost" size="icon" aria-label="Hapus proker" className="text-destructive hover:text-destructive">
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </ConfirmForm>
                             </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { IconDotsVertical, IconLogout } from "@tabler/icons-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,8 +18,23 @@ export function NavUser({
   };
 }) {
   const { isMobile } = useSidebar();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const fallbackInitials = user.name ? user.name.slice(0, 2).toUpperCase() : "US";
   const avatarSrc = undefined;
+
+  const handleLogout = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      // swallow error; redirect anyway
+    } finally {
+      router.replace("/");
+      setLoading(false);
+    }
+  };
 
   return (
     <SidebarMenu>
@@ -50,9 +67,15 @@ export function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                handleLogout();
+              }}
+              className={loading ? "opacity-70" : ""}
+            >
               <IconLogout />
-              Log out
+              {loading ? "Logging out..." : "Log out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

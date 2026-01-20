@@ -21,15 +21,21 @@ export async function getEventReport(eventId: string, session: Session) {
   const requesterDivisionName = requester?.division?.name ?? null;
   const kadivScopeAll = isKadivPSDM(session.role, requesterDivisionName);
 
-  const evaluations = await prisma.evaluation.findMany({
-    where: { eventId, scores: { some: {} } },
-    include: {
-      evaluatee: { include: { division: true } },
-      scores: { include: { indicatorSnapshot: { include: { indicator: true } } } },
-    },
-  });
+  const baseWhere = session.role === "KADIV" && !kadivScopeAll && requesterDivisionId ? { eventId, evaluatee: { divisionId: requesterDivisionId } } : { eventId };
 
-  const filtered = session.role === "KADIV" && !kadivScopeAll ? evaluations.filter((ev) => ev.evaluatee.divisionId === requesterDivisionId) : evaluations;
+  const [evaluations, assignmentsCount, submissionsCount, evaluatorDistinct, evaluateeDistinct] = await Promise.all([
+    prisma.evaluation.findMany({
+      where: { ...baseWhere, scores: { some: {} } },
+      include: {
+        evaluatee: { include: { division: true } },
+        scores: { include: { indicatorSnapshot: { include: { indicator: true } } } },
+      },
+    }),
+    prisma.evaluation.count({ where: baseWhere }),
+    prisma.evaluation.count({ where: { ...baseWhere, scores: { some: {} } } }),
+    prisma.evaluation.findMany({ where: baseWhere, select: { evaluatorId: true }, distinct: ["evaluatorId"] }),
+    prisma.evaluation.findMany({ where: baseWhere, select: { evaluateeId: true }, distinct: ["evaluateeId"] }),
+  ]);
 
   const byEvaluatee: Record<
     string,
@@ -45,7 +51,7 @@ export async function getEventReport(eventId: string, session: Session) {
     }
   > = {};
 
-  for (const ev of filtered) {
+  for (const ev of evaluations) {
     const key = ev.evaluateeId;
     if (!byEvaluatee[key]) {
       byEvaluatee[key] = {
@@ -109,6 +115,12 @@ export async function getEventReport(eventId: string, session: Session) {
       indicators: event.indicators.map((i) => ({ id: i.id, name: i.indicator.name, category: i.indicator.category })),
     },
     results,
+    stats: {
+      totalAssignments: assignmentsCount,
+      submittedCount: submissionsCount,
+      evaluatorCount: evaluatorDistinct.length,
+      evaluateeCount: evaluateeDistinct.length,
+    },
   };
 }
 

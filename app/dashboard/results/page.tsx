@@ -53,13 +53,16 @@ export default async function ResultsPage({ searchParams }: PageProps) {
 
   const report = await getEventReport(selectedId, session);
 
-  const evaluateeCount = report.results.length;
-  const submissionCount = report.results.reduce((acc, r) => acc + r.raterCount, 0);
-  const overallAvg = evaluateeCount ? report.results.reduce((acc, r) => acc + r.overallAvg, 0) / evaluateeCount : 0;
+  const evaluateeWithScores = report.results.length;
+  const overallAvg = evaluateeWithScores ? report.results.reduce((acc, r) => acc + r.overallAvg, 0) / evaluateeWithScores : 0;
+  const totalAssignments = report.stats.totalAssignments;
+  const submissionCount = report.stats.submittedCount;
+  const pendingCount = Math.max(totalAssignments - submissionCount, 0);
+  const raterCount = report.stats.evaluatorCount;
+  const evaluateeCount = report.stats.evaluateeCount;
   const indicatorCount = report.event.indicators.length;
-  const hardCount = report.event.indicators.filter((i) => i.category === "hard").length;
-  const softCount = report.event.indicators.filter((i) => i.category === "soft").length;
-  const otherCount = indicatorCount - hardCount - softCount;
+  const hardCount = report.event.indicators.filter((i) => i.category === "hardskill").length;
+  const softCount = report.event.indicators.filter((i) => i.category === "softskill").length;
 
   const indicatorAverages = buildIndicatorAverages(report.results);
   const sidebarStyle = {
@@ -68,6 +71,7 @@ export default async function ResultsPage({ searchParams }: PageProps) {
   } as React.CSSProperties;
 
   const dateFmt = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" });
+  const typeLabel = report.event.type === "PROKER" ? "Event Proker" : "Event Periodik";
 
   return (
     <SidebarShell user={currentUser ? { name: currentUser.name, email: currentUser.email ?? undefined } : undefined} sidebarStyle={sidebarStyle}>
@@ -91,24 +95,13 @@ export default async function ResultsPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <Card>
-            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="space-y-1">
-                <CardTitle className="text-lg">{report.event.name}</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  {report.event.type} · {report.event.period}
-                  {report.event.proker ? ` · ${report.event.proker}` : ""}
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  {dateFmt.format(new Date(report.event.startDate))} - {dateFmt.format(new Date(report.event.endDate))}
-                </p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Badge variant="outline">{evaluateeCount} evaluatee</Badge>
-                  <Badge variant="outline">{indicatorCount} indikator</Badge>
-                </div>
+                <p className="text-sm font-medium">Pilih event</p>
+                <p className="text-muted-foreground text-xs">Ganti event untuk melihat progres submission dan ringkasan.</p>
               </div>
-              <form className="flex flex-wrap items-center gap-2" method="get">
-                <label className="text-sm font-medium text-foreground">Pilih event</label>
+              <form className="flex flex-col gap-2 sm:flex-row sm:items-center" method="get">
                 <select name="eventId" defaultValue={selectedId} className="rounded-lg border border-border px-3 py-2 text-sm">
                   {events.map((ev) => (
                     <option key={ev.id} value={ev.id}>
@@ -116,30 +109,50 @@ export default async function ResultsPage({ searchParams }: PageProps) {
                     </option>
                   ))}
                 </select>
-                <Button type="submit" variant="outline" size="sm">
+                <Button type="submit" variant="default" size="sm">
                   Tampilkan
                 </Button>
               </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="relative flex flex-col gap-3">
+              <div className="flex flex-col gap-2 sm:pr-48">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-lg">{report.event.name}</CardTitle>
+                  <Badge variant="secondary">{typeLabel}</Badge>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  {report.event.period}
+                  {report.event.proker ? ` · ${report.event.proker}` : ""}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Timeline: {dateFmt.format(new Date(report.event.startDate))} - {dateFmt.format(new Date(report.event.endDate))}
+                </p>
+              </div>
+              <div className="sm:absolute sm:right-4 sm:top-4 flex flex-wrap gap-2">
+                <Badge variant="outline">{raterCount} penilai</Badge>
+                <Badge variant="outline">{evaluateeCount} dinilai</Badge>
+                <Badge variant="outline">{indicatorCount} indikator</Badge>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "Rata-rata keseluruhan", value: overallAvg },
-                  { label: "Total submission", value: submissionCount },
+                  { label: "Total penilaian", value: totalAssignments },
+                  { label: "Sudah submit", value: submissionCount },
+                  { label: "Belum submit", value: pendingCount },
                   { label: "Indikator hard", value: hardCount },
                   { label: "Indikator soft", value: softCount },
-                ].map((stat) => (
-                  <div key={stat.label} className="border-border/60 bg-card/70 rounded-lg border px-3 py-3 shadow-xs">
-                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{stat.label}</p>
-                    <p className="text-2xl font-semibold tabular-nums">{typeof stat.value === "number" ? stat.value.toFixed(2).replace(/\.00$/, "") : stat.value}</p>
-                  </div>
-                ))}
-                {otherCount > 0 && (
-                  <div className="border-border/60 bg-card/70 rounded-lg border px-3 py-3 shadow-xs">
-                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Indikator lainnya</p>
-                    <p className="text-2xl font-semibold tabular-nums">{otherCount}</p>
-                  </div>
-                )}
+                ]
+                  .filter(Boolean)
+                  .map((stat) => (
+                    <div key={stat!.label} className="border-border/60 bg-card/70 rounded-lg border px-3 py-3 shadow-xs">
+                      <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{stat!.label}</p>
+                      <p className="text-2xl font-semibold tabular-nums">{typeof stat!.value === "number" ? (stat!.value as number).toLocaleString("id-ID") : stat!.value}</p>
+                    </div>
+                  ))}
               </div>
             </CardContent>
           </Card>

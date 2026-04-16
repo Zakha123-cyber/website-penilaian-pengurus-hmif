@@ -16,7 +16,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { indicators as indicatorsTable, periods, users, indicatorSnapshots } from "@/lib/schema";
+import { eq, desc, asc, sql } from "drizzle-orm";
 import { createIndicatorSchema, updateIndicatorSchema } from "@/lib/validation";
 
 const categories = [
@@ -47,7 +49,7 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
     const parsed = createIndicatorSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    await prisma.indicator.create({ data: parsed.data });
+    await db.insert(indicatorsTable).values({ id: crypto.randomUUID(), ...parsed.data });
     revalidatePath("/dashboard/indicators");
     redirect(`/dashboard/indicators?success=${encodeURIComponent("Indikator ditambahkan")}&alert=success`);
   }
@@ -67,7 +69,7 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
     const parsed = updateIndicatorSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    await prisma.indicator.update({ where: { id }, data: parsed.data });
+    await db.update(indicatorsTable).set(parsed.data).where(eq(indicatorsTable.id, id));
     revalidatePath("/dashboard/indicators");
     redirect(`/dashboard/indicators?success=${encodeURIComponent("Indikator diperbarui")}&alert=success`);
   }
@@ -80,30 +82,34 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
 
     const id = String(formData.get("id") ?? "");
 
-    const snapshots = await prisma.indicatorSnapshot.count({ where: { indicatorId: id } });
-    if (snapshots > 0) {
+    const [countRow] = await db.select({ cnt: sql<number>`count(*)` }).from(indicatorSnapshots).where(eq(indicatorSnapshots.indicatorId, id));
+    const snapshotsCount = Number(countRow?.cnt ?? 0);
+
+    if (snapshotsCount > 0) {
       redirect(`/dashboard/indicators?error=${encodeURIComponent("Tidak dapat menghapus: indikator sudah dipakai event")}&alert=error`);
     }
 
-    await prisma.indicator.delete({ where: { id } });
+    await db.delete(indicatorsTable).where(eq(indicatorsTable.id, id));
     revalidatePath("/dashboard/indicators");
     redirect(`/dashboard/indicators?success=${encodeURIComponent("Indikator dihapus")}&alert=success`);
   }
 
-  const [activePeriod, indicators, currentUser] = await Promise.all([
-    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
-    prisma.indicator.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+  const [activePeriod, indicatorsData, currentUser] = await Promise.all([
+    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.select().from(indicatorsTable).orderBy(asc(indicatorsTable.category), asc(indicatorsTable.name)),
+    session.userId ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
+
+  const indicators = indicatorsData;
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const error = params?.error ? decodeURIComponent(params.error) : undefined;
   const alert = (params?.alert as "success" | "error" | "info") ?? (error ? "error" : "success");
 
   const totalIndicators = indicators.length;
-  const activeIndicators = indicators.filter((i) => i.isActive).length;
-  const hardCount = indicators.filter((i) => i.category === "hard").length;
-  const softCount = indicators.filter((i) => i.category === "soft").length;
+  const activeIndicators = indicators.filter((i: any) => i.isActive).length;
+  const hardCount = indicators.filter((i: any) => i.category === "hard").length;
+  const softCount = indicators.filter((i: any) => i.category === "soft").length;
 
   const sidebarStyle = {
     "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -204,7 +210,7 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {indicators.map((indicator) => (
+                    {indicators.map((indicator: any) => (
                       <TableRow key={indicator.id}>
                         <TableCell className="pl-4 font-medium">{indicator.name}</TableCell>
                         <TableCell className="text-muted-foreground">{categories.find((c) => c.value === indicator.category)?.label ?? indicator.category}</TableCell>

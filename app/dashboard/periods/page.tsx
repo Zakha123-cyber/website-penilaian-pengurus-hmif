@@ -16,7 +16,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { periods, users } from "@/lib/schema";
+import { eq, desc } from "drizzle-orm";
 import { createPeriodSchema } from "@/lib/validation";
 
 type PeriodsPageProps = { searchParams: Promise<Record<string, string | undefined>> };
@@ -45,9 +47,9 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
 
     const { name, startYear, endYear, isActive } = parsed.data;
 
-    if (isActive) await prisma.period.updateMany({ data: { isActive: false } });
+    if (isActive) await db.update(periods).set({ isActive: false });
 
-    await prisma.period.create({ data: { name, startYear, endYear, isActive } });
+    await db.insert(periods).values({ id: crypto.randomUUID(), name, startYear, endYear, isActive, createdAt: new Date() });
     revalidatePath("/dashboard/periods");
     redirect(`/dashboard/periods?success=${encodeURIComponent("Periode ditambahkan")}&alert=success`);
   }
@@ -71,9 +73,9 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
 
     const { name, startYear, endYear, isActive } = parsed.data;
 
-    if (isActive) await prisma.period.updateMany({ data: { isActive: false } });
+    if (isActive) await db.update(periods).set({ isActive: false });
 
-    await prisma.period.update({ where: { id }, data: { name, startYear, endYear, isActive } });
+    await db.update(periods).set({ name, startYear, endYear, isActive }).where(eq(periods.id, id));
     revalidatePath("/dashboard/periods");
     redirect(`/dashboard/periods?success=${encodeURIComponent("Periode diperbarui")}&alert=success`);
   }
@@ -85,22 +87,24 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
-    await prisma.period.delete({ where: { id } });
+    await db.delete(periods).where(eq(periods.id, id));
     revalidatePath("/dashboard/periods");
     redirect(`/dashboard/periods?success=${encodeURIComponent("Periode dihapus")}&alert=success`);
   }
 
-  const [activePeriod, periods, currentUser] = await Promise.all([
-    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
-    prisma.period.findMany({ orderBy: { startYear: "desc" } }),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+  const [activePeriod, allPeriods, currentUser] = await Promise.all([
+    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.select().from(periods).orderBy(desc(periods.startYear)),
+    session.userId ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
+
+  const periodsData = allPeriods;
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const alert = params?.alert;
 
-  const totalPeriods = periods.length;
-  const activeCount = periods.filter((p) => p.isActive).length;
+  const totalPeriods = periodsData.length;
+  const activeCount = periodsData.filter((p) => p.isActive).length;
   const inactiveCount = totalPeriods - activeCount;
 
   const sidebarStyle = {
@@ -197,7 +201,7 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {periods.map((period) => (
+                    {periodsData.map((period) => (
                       <TableRow key={period.id}>
                         <TableCell className="pl-4 font-medium">{period.name}</TableCell>
                         <TableCell className="text-muted-foreground">
@@ -254,7 +258,7 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {periods.length === 0 && (
+                    {periodsData.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
                           Belum ada periode.

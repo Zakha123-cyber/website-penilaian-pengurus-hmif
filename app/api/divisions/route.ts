@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { divisions } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { createDivisionSchema } from "@/lib/validation";
+import { asc } from "drizzle-orm";
 
 export async function GET() {
   const session = await getSession();
@@ -13,11 +15,8 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const divisions = await prisma.division.findMany({
-    orderBy: { name: "asc" },
-  });
-
-  return NextResponse.json({ divisions });
+  const result = await db.select().from(divisions).orderBy(asc(divisions.name));
+  return NextResponse.json({ divisions: result });
 }
 
 export async function POST(request: Request) {
@@ -35,7 +34,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const division = await prisma.division.create({ data: parsed.data });
+  const id = crypto.randomUUID();
+  await db.insert(divisions).values({ id, name: parsed.data.name, createdAt: new Date() });
 
-  return NextResponse.json({ division }, { status: 201 });
+  return NextResponse.json({ division: { id, ...parsed.data } }, { status: 201 });
 }

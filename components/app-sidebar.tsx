@@ -75,9 +75,9 @@ export function AppSidebar({ user, ...props }: React.ComponentProps<typeof Sideb
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5">
-              <a href="#">
-                <IconInnerShadowTop className="size-5" />
-                <span className="text-base font-semibold">Website Penilaian HMIF</span>
+              <a href="/dashboard" className="flex items-center gap-2">
+                <img src="/images/logo-hmif.png" alt="HMIF Logo" className="size-8" />
+                <span className="text-base font-semibold">APD HMIF</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

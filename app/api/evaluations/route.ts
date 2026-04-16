@@ -1,23 +1,44 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import {
+  evaluations,
+  evaluationScores,
+  indicatorSnapshots,
+  evaluationEvents,
+} from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { submitEvaluationSchema } from "@/lib/validation";
+import { eq, desc, inArray } from "drizzle-orm";
 
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-  const evaluations = await prisma.evaluation.findMany({
-    where: { evaluatorId: session.userId },
-    include: {
-      evaluatee: { include: { division: true } },
-      event: { include: { indicators: { include: { indicator: true } } } },
-      scores: { include: { indicatorSnapshot: { include: { indicator: true } } } },
+  const result = await db.query.evaluations.findMany({
+    where: eq(evaluations.evaluatorId, session.userId),
+    orderBy: [desc(evaluations.createdAt)],
+    with: {
+      evaluatee: {
+        with: { division: true },
+      },
+      event: {
+        with: {
+          indicators: {
+            with: { indicator: true },
+          },
+        },
+      },
+      scores: {
+        with: {
+          indicatorSnapshot: {
+            with: { indicator: true },
+          },
+        },
+      },
     },
-    orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ evaluations });
+  return NextResponse.json({ evaluations: result });
 }
 
 export async function POST(request: Request) {
@@ -32,10 +53,13 @@ export async function POST(request: Request) {
 
   const { evaluationId, feedback, scores } = parsed.data;
 
-  const evaluation = await prisma.evaluation.findUnique({
-    where: { id: evaluationId },
-    include: {
-      event: { include: { indicators: true } },
+  // Fetch evaluation with its event and existing scores
+  const evaluation = await db.query.evaluations.findFirst({
+    where: eq(evaluations.id, evaluationId),
+    with: {
+      event: {
+        with: { indicators: true },
+      },
       scores: true,
     },
   });
@@ -45,7 +69,11 @@ export async function POST(request: Request) {
   }
 
   const now = new Date();
-  if (!evaluation.event.isOpen || now < evaluation.event.startDate || now > evaluation.event.endDate) {
+  if (
+    !evaluation.event.isOpen ||
+    now < evaluation.event.startDate ||
+    now > evaluation.event.endDate
+  ) {
     return NextResponse.json({ error: "Event belum dibuka atau sudah ditutup" }, { status: 400 });
   }
 
@@ -59,22 +87,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Indikator tidak valid untuk event ini" }, { status: 400 });
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.evaluationScore.createMany({
-      data: scores.map((s) => ({
-        evaluationId: evaluation.id,
-        indicatorSnapshotId: s.indicatorSnapshotId,
-        score: s.score,
-      })),
-    });
+  // Insert scores and update feedback
+  await db.insert(evaluationScores).values(
+    scores.map((s) => ({
+      id: crypto.randomUUID(),
+      evaluationId: evaluation.id,
+      indicatorSnapshotId: s.indicatorSnapshotId,
+      score: s.score,
+      createdAt: new Date(),
+    }))
+  );
 
-    await tx.evaluation.update({ where: { id: evaluation.id }, data: { feedback } });
-  });
+  await db
+    .update(evaluations)
+    .set({ feedback: feedback ?? null })
+    .where(eq(evaluations.id, evaluation.id));
 
-  const full = await prisma.evaluation.findUnique({
-    where: { id: evaluation.id },
-    include: {
-      scores: { include: { indicatorSnapshot: { include: { indicator: true } } } },
+  const full = await db.query.evaluations.findFirst({
+    where: eq(evaluations.id, evaluation.id),
+    with: {
+      scores: {
+        with: {
+          indicatorSnapshot: { with: { indicator: true } },
+        },
+      },
       evaluatee: true,
       event: true,
     },

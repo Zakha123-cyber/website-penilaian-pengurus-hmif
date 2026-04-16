@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { periods, users, evaluations, evaluationEvents, prokers, evaluationScores, divisions } from "@/lib/schema";
+import { eq, and, ne, between, desc, asc, inArray, sql } from "drizzle-orm";
 
 type Session = { userId: string; role: string; periodId: string };
 
@@ -38,20 +40,20 @@ export async function getMonthlyRank(
     _session: Session
 ): Promise<MonthlyRankResult> {
     // Get the period name
-    const period = await prisma.period.findUnique({
-        where: { id: periodId },
-        select: { name: true },
+    const periodData = await db.query.periods.findFirst({
+        where: eq(periods.id, periodId),
+        columns: { name: true },
     });
 
-    if (!period) throw new Error("Periode tidak ditemukan");
+    if (!periodData) throw new Error("Periode tidak ditemukan");
 
     // Fetch ALL non-admin users in this period
-    const allUsers = await prisma.user.findMany({
-        where: {
-            periodId,
-            role: { not: "ADMIN" },
-        },
-        include: {
+    const allUsers = await db.query.users.findMany({
+        where: and(
+            eq(users.periodId, periodId),
+            ne(users.role, "ADMIN")
+        ),
+        with: {
             division: true,
         },
     });
@@ -60,55 +62,25 @@ export async function getMonthlyRank(
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
 
-    // Fetch all evaluations in PROKER events within the given month and period
-    const evaluations = await prisma.evaluation.findMany({
-        where: {
-            event: {
-                periodId,
-                type: "PROKER",
-            },
-            createdAt: {
-                gte: startOfMonth,
-                lte: endOfMonth,
-            },
-            scores: { some: {} },
-        },
-        include: {
+    // Fetch all evaluations within the given month and period
+    const evaluationsData = await db.query.evaluations.findMany({
+        where: between(evaluations.createdAt, startOfMonth, endOfMonth),
+        with: {
             evaluatee: {
-                include: { division: true },
+                with: { division: true },
             },
             event: {
-                include: { proker: true },
+                with: { proker: true },
             },
             scores: true,
         },
     });
 
-    // Also include PERIODIC evaluations within the month
-    const periodicEvaluations = await prisma.evaluation.findMany({
-        where: {
-            event: {
-                periodId,
-                type: "PERIODIC",
-            },
-            createdAt: {
-                gte: startOfMonth,
-                lte: endOfMonth,
-            },
-            scores: { some: {} },
-        },
-        include: {
-            evaluatee: {
-                include: { division: true },
-            },
-            event: {
-                include: { proker: true },
-            },
-            scores: true,
-        },
-    });
-
-    const allEvals = [...evaluations, ...periodicEvaluations];
+    const allEvals = evaluationsData.filter(ev =>
+        ev.event.periodId === periodId &&
+        (ev.event.type === "PROKER" || ev.event.type === "PERIODIC") &&
+        ev.scores.length > 0
+    );
 
     // Group by evaluatee
     const userMap = new Map<
@@ -204,19 +176,17 @@ export async function getMonthlyRank(
     const prevStartOfMonth = new Date(prevYear, prevMonth - 1, 1);
     const prevEndOfMonth = new Date(prevYear, prevMonth, 0, 23, 59, 59, 999);
 
-    const prevEvaluations = await prisma.evaluation.findMany({
-        where: {
-            event: { periodId },
-            createdAt: {
-                gte: prevStartOfMonth,
-                lte: prevEndOfMonth,
-            },
-            scores: { some: {} },
-        },
-        include: {
+    const prevEvalsData = await db.query.evaluations.findMany({
+        where: between(evaluations.createdAt, prevStartOfMonth, prevEndOfMonth),
+        with: {
+            event: true,
             scores: true,
         },
     });
+
+    const prevEvaluations = prevEvalsData.filter(ev =>
+        ev.event.periodId === periodId && ev.scores.length > 0
+    );
 
     // Build previous month rankings
     const prevUserMap = new Map<string, { totalScore: number; scoreCount: number }>();
@@ -275,7 +245,7 @@ export async function getMonthlyRank(
         month,
         year,
         monthLabel: `${monthNames[month - 1]} ${year}`,
-        periodName: period.name,
+        periodName: periodData.name,
         rankings: entries,
         totalEvaluated,
         averageScore,
@@ -288,18 +258,15 @@ export async function getMonthlyRank(
  * Get available months that have evaluation data for a given period.
  */
 export async function getAvailableMonths(periodId: string) {
-    const evaluations = await prisma.evaluation.findMany({
-        where: {
-            event: { periodId },
-            scores: { some: {} },
-        },
-        select: {
-            createdAt: true,
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-    });
+    const evals = await db.select({
+        createdAt: evaluations.createdAt
+    })
+        .from(evaluations)
+        .innerJoin(evaluationEvents, eq(evaluations.eventId, evaluationEvents.id))
+        .innerJoin(evaluationScores, eq(evaluations.id, evaluationScores.evaluationId))
+        .where(eq(evaluationEvents.periodId, periodId))
+        .groupBy(evaluations.id)
+        .orderBy(desc(evaluations.createdAt));
 
     const monthSet = new Set<string>();
     const months: { month: number; year: number; label: string }[] = [];
@@ -309,7 +276,8 @@ export async function getAvailableMonths(periodId: string) {
         "Juli", "Agustus", "September", "Oktober", "November", "Desember",
     ];
 
-    for (const ev of evaluations) {
+    for (const ev of evals) {
+        if (!ev.createdAt) continue;
         const date = new Date(ev.createdAt);
         const key = `${date.getFullYear()}-${date.getMonth() + 1}`;
         if (!monthSet.has(key)) {

@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
-import { prisma } from "./prisma";
+import { db } from "./db";
+import { users } from "./schema";
+import { eq } from "drizzle-orm";
 
 export const SESSION_COOKIE = "app_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -22,7 +24,7 @@ function getSecret(): Uint8Array {
 }
 
 export async function authenticate(nim: string, password: string): Promise<{ payload: SessionPayload; token: string }> {
-  const user = await prisma.user.findUnique({ where: { nim } });
+  const [user] = await db.select().from(users).where(eq(users.nim, nim)).limit(1);
   if (!user || !user.isActive) {
     throw new Error("Invalid credentials");
   }
@@ -32,7 +34,7 @@ export async function authenticate(nim: string, password: string): Promise<{ pay
     throw new Error("Invalid credentials");
   }
 
-  const mustSuggestPasswordChange = !(user as any).passwordUpdatedAt;
+  const mustSuggestPasswordChange = !user.passwordUpdatedAt;
 
   const payload: SessionPayload = {
     userId: user.id,
@@ -41,7 +43,11 @@ export async function authenticate(nim: string, password: string): Promise<{ pay
     mustSuggestPasswordChange,
   };
 
-  const token = await new SignJWT(payload).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`).sign(getSecret());
+  const token = await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
+    .sign(getSecret());
 
   return { payload, token };
 }

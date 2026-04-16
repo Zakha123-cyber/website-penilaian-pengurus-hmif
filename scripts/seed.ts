@@ -1,7 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { db } from "../lib/db";
+import { indicators, prokers, periods, divisions, users, evaluationEvents, indicatorSnapshots, evaluations, evaluationScores } from "../lib/schema";
+import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
 
 const hardIndicators = [
   "Perencanaan Program",
@@ -40,16 +40,16 @@ const DEFAULT_USERS = [
 async function seedIndicators() {
   console.log("Seeding indicators...");
   for (const name of hardIndicators) {
-    const existing = await prisma.indicator.findFirst({ where: { name } });
+    const existing = await db.query.indicators.findFirst({ where: eq(indicators.name, name) });
     if (!existing) {
-      await prisma.indicator.create({ data: { name, category: "hardskill" } });
+      await db.insert(indicators).values({ id: crypto.randomUUID(), name, category: "hardskill" });
     }
   }
 
   for (const name of softIndicators) {
-    const existing = await prisma.indicator.findFirst({ where: { name } });
+    const existing = await db.query.indicators.findFirst({ where: eq(indicators.name, name) });
     if (!existing) {
-      await prisma.indicator.create({ data: { name, category: "softskill" } });
+      await db.insert(indicators).values({ id: crypto.randomUUID(), name, category: "softskill" });
     }
   }
 }
@@ -57,101 +57,122 @@ async function seedIndicators() {
 async function seedProker(periodId: string, divisionMap: Record<string, string>) {
   console.log("Seeding sample proker...");
   const name = "Pengembangan Kepemimpinan";
-  const existing = await prisma.proker.findFirst({ where: { name, periodId } });
+  const existing = await db.query.prokers.findFirst({ where: and(eq(prokers.name, name), eq(prokers.periodId, periodId)) });
   if (existing) return existing.id;
 
   const divisionId = divisionMap["PSDM"] ?? Object.values(divisionMap)[0];
-  const proker = await prisma.proker.create({ data: { name, periodId, divisionId } });
-  return proker.id;
+  const id = crypto.randomUUID();
+  await db.insert(prokers).values({ id, name, periodId, divisionId });
+  return id;
 }
 
 async function seedEventsAndEvaluations(periodId: string, prokerId: string | null, userMap: Record<string, string>) {
   console.log("Seeding events, snapshots, and evaluations...");
 
-  const indicators = await prisma.indicator.findMany({ orderBy: { name: "asc" } });
-  const hard = indicators.filter((i) => i.category === "hardskill").slice(0, 2);
-  const soft = indicators.filter((i) => i.category === "softskill").slice(0, 2);
+  const indicatorsData = await db.query.indicators.findMany({ orderBy: [asc(indicators.name)] });
+  const hard = indicatorsData.filter((i: any) => i.category === "hardskill").slice(0, 2);
+  const soft = indicatorsData.filter((i: any) => i.category === "softskill").slice(0, 2);
   const chosenIndicators = [...hard, ...soft];
   if (chosenIndicators.length === 0) {
     console.warn("No indicators found; skipping event seeding.");
     return;
   }
 
-  const periodicEvent =
-    (await prisma.evaluationEvent.findFirst({ where: { name: "Evaluasi Tengah Periode", periodId } })) ??
-    (await prisma.evaluationEvent.create({
-      data: {
-        name: "Evaluasi Tengah Periode",
-        type: "PERIODIC",
-        periodId,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        isOpen: true,
-      },
-    }));
-
-  const prokerEvent = prokerId
-    ? ((await prisma.evaluationEvent.findFirst({ where: { name: "Evaluasi Proker PSDM", periodId, prokerId } })) ??
-      (await prisma.evaluationEvent.create({
-        data: {
-          name: "Evaluasi Proker PSDM",
-          type: "PROKER",
-          prokerId,
-          periodId,
-          startDate: new Date(),
-          endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          isOpen: true,
-        },
-      })))
-    : null;
-
-  async function ensureSnapshots(eventId: string) {
-    const existing = await prisma.indicatorSnapshot.findMany({ where: { eventId } });
-    if (existing.length > 0) return existing;
-    await prisma.indicatorSnapshot.createMany({
-      data: chosenIndicators.map((ind) => ({ indicatorId: ind.id, eventId })),
+  let periodicEvent = await db.query.evaluationEvents.findFirst({ where: and(eq(evaluationEvents.name, "Evaluasi Tengah Periode"), eq(evaluationEvents.periodId, periodId)) });
+  if (!periodicEvent) {
+    const id = crypto.randomUUID();
+    await db.insert(evaluationEvents).values({
+      id,
+      name: "Evaluasi Tengah Periode",
+      type: "PERIODIC",
+      periodId,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isOpen: true,
     });
-    return prisma.indicatorSnapshot.findMany({ where: { eventId } });
+    periodicEvent = await db.query.evaluationEvents.findFirst({ where: eq(evaluationEvents.id, id) });
   }
 
-  const periodicSnapshots = await ensureSnapshots(periodicEvent.id);
+  let prokerEvent = null;
+  if (prokerId) {
+    prokerEvent = await db.query.evaluationEvents.findFirst({ where: and(eq(evaluationEvents.name, "Evaluasi Proker PSDM"), eq(evaluationEvents.periodId, periodId), eq(evaluationEvents.prokerId, prokerId)) });
+    if (!prokerEvent) {
+      const id = crypto.randomUUID();
+      await db.insert(evaluationEvents).values({
+        id,
+        name: "Evaluasi Proker PSDM",
+        type: "PROKER",
+        prokerId,
+        periodId,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        isOpen: true,
+      });
+      prokerEvent = await db.query.evaluationEvents.findFirst({ where: eq(evaluationEvents.id, id) });
+    }
+  }
+
+  async function ensureSnapshots(eventId: string) {
+    const existing = await db.query.indicatorSnapshots.findMany({ where: eq(indicatorSnapshots.eventId, eventId) });
+    if (existing.length > 0) return existing;
+
+    const values = chosenIndicators.map((ind) => ({
+      id: crypto.randomUUID(),
+      indicatorId: ind.id,
+      eventId
+    }));
+    await db.insert(indicatorSnapshots).values(values);
+    return db.query.indicatorSnapshots.findMany({ where: eq(indicatorSnapshots.eventId, eventId) });
+  }
+
+  const periodicSnapshots = await ensureSnapshots(periodicEvent!.id);
   const prokerSnapshots = prokerEvent ? await ensureSnapshots(prokerEvent.id) : [];
 
   const scoresA = [4, 5, 4, 5];
   const scoresB = [3, 4, 3, 4];
 
-  async function createEvaluation(eventId: string, evaluatorNim: string, evaluateeNim: string, snapshotList: typeof periodicSnapshots, scores: number[], feedback?: string) {
+  async function createEvaluation(eventId: string, evaluatorNim: string, evaluateeNim: string, snapshotList: any[], scores: number[], feedback?: string) {
     const evaluatorId = userMap[evaluatorNim];
     const evaluateeId = userMap[evaluateeNim];
     if (!evaluatorId || !evaluateeId) return;
 
-    const evaluation = await prisma.evaluation.upsert({
-      where: {
-        evaluatorId_evaluateeId_eventId: {
-          evaluatorId,
-          evaluateeId,
-          eventId,
-        },
-      },
-      update: { feedback },
-      create: { evaluatorId, evaluateeId, eventId, feedback },
+    let evaluation = await db.query.evaluations.findFirst({
+      where: and(
+        eq(evaluations.evaluatorId, evaluatorId),
+        eq(evaluations.evaluateeId, evaluateeId),
+        eq(evaluations.eventId, eventId)
+      )
     });
 
-    const existingScores = await prisma.evaluationScore.findMany({ where: { evaluationId: evaluation.id } });
-    if (existingScores.length === 0) {
-      await prisma.evaluationScore.createMany({
-        data: snapshotList.map((snap, idx) => ({
-          evaluationId: evaluation.id,
-          indicatorSnapshotId: snap.id,
-          score: scores[idx] ?? scores[scores.length - 1] ?? 4,
-        })),
+    if (evaluation) {
+      await db.update(evaluations).set({ feedback }).where(eq(evaluations.id, evaluation.id));
+    } else {
+      const id = crypto.randomUUID();
+      await db.insert(evaluations).values({
+        id,
+        evaluatorId,
+        evaluateeId,
+        eventId,
+        feedback
       });
+      evaluation = { id } as any;
+    }
+
+    const existingScores = await db.query.evaluationScores.findMany({ where: eq(evaluationScores.evaluationId, evaluation!.id) });
+    if (existingScores.length === 0) {
+      const scoreValues = snapshotList.map((snap, idx) => ({
+        id: crypto.randomUUID(),
+        evaluationId: evaluation!.id,
+        indicatorSnapshotId: snap.id,
+        score: scores[idx] ?? scores[scores.length - 1] ?? 4,
+      }));
+      await db.insert(evaluationScores).values(scoreValues);
     }
   }
 
   // Periodic event evaluations
-  await createEvaluation(periodicEvent.id, "0001", "2001", periodicSnapshots, scoresA, "Kinerja solid, teruskan ritme.");
-  await createEvaluation(periodicEvent.id, "1001", "3001", periodicSnapshots, scoresB, "Perbaiki dokumentasi dan komunikasi.");
+  await createEvaluation(periodicEvent!.id, "0001", "2001", periodicSnapshots, scoresA, "Kinerja solid, teruskan ritme.");
+  await createEvaluation(periodicEvent!.id, "1001", "3001", periodicSnapshots, scoresB, "Perbaiki dokumentasi dan komunikasi.");
 
   // Proker event evaluations
   if (prokerEvent) {
@@ -162,17 +183,14 @@ async function seedEventsAndEvaluations(periodId: string, prokerId: string | nul
 
 async function seedUserPasswords() {
   console.log("Backfilling password hashes for existing users (if needed)...");
-  const users = await prisma.user.findMany({ select: { id: true, passwordHash: true } });
-  const targets = users.filter((u) => !u.passwordHash || u.passwordHash.length < 20 || !u.passwordHash.startsWith("$2"));
+  const usersData = await db.query.users.findMany({ columns: { id: true, passwordHash: true } });
+  const targets = usersData.filter((u: any) => !u.passwordHash || u.passwordHash.length < 20 || !u.passwordHash.startsWith("$2"));
   if (targets.length === 0) return;
 
   const hash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
   await Promise.all(
-    targets.map((u) =>
-      prisma.user.update({
-        where: { id: u.id },
-        data: { passwordHash: hash },
-      }),
+    targets.map((u: any) =>
+      db.update(users).set({ passwordHash: hash }).where(eq(users.id, u.id))
     ),
   );
   console.log(`Updated passwordHash for ${targets.length} user(s) with default password.`);
@@ -180,25 +198,28 @@ async function seedUserPasswords() {
 
 async function seedPeriodAndDivisions() {
   console.log("Seeding period and divisions...");
-  const existingPeriod = await prisma.period.findFirst({ where: { name: DEFAULT_PERIOD.name } });
-  const period =
-    existingPeriod ??
-    (await prisma.period.create({
-      data: DEFAULT_PERIOD,
-    }));
+  let period = await db.query.periods.findFirst({ where: eq(periods.name, DEFAULT_PERIOD.name) });
+  if (!period) {
+    const id = crypto.randomUUID();
+    await db.insert(periods).values({
+      id,
+      ...DEFAULT_PERIOD,
+    });
+    period = await db.query.periods.findFirst({ where: eq(periods.id, id) });
+  }
 
   const divisionMap: Record<string, string> = {};
   for (const name of DEFAULT_DIVISIONS) {
-    const existingDivision = await prisma.division.findFirst({ where: { name } });
-    const division =
-      existingDivision ??
-      (await prisma.division.create({
-        data: { name },
-      }));
-    divisionMap[name] = division.id;
+    let division = await db.query.divisions.findFirst({ where: eq(divisions.name, name) });
+    if (!division) {
+      const id = crypto.randomUUID();
+      await db.insert(divisions).values({ id, name });
+      division = await db.query.divisions.findFirst({ where: eq(divisions.id, id) });
+    }
+    divisionMap[name] = division!.id;
   }
 
-  return { periodId: period.id, divisionMap };
+  return { periodId: period!.id, divisionMap };
 }
 
 async function seedUsers(periodId: string, divisionMap: Record<string, string>) {
@@ -206,26 +227,25 @@ async function seedUsers(periodId: string, divisionMap: Record<string, string>) 
   const hash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
   for (const u of DEFAULT_USERS) {
     try {
-      await prisma.user.upsert({
-        where: { nim: u.nim },
-        update: {
-          name: u.name,
-          role: u.role,
-          isActive: true,
-          periodId,
-          divisionId: u.division ? divisionMap[u.division] : null,
-          passwordHash: hash,
-        },
-        create: {
+      const existing = await db.query.users.findFirst({ where: eq(users.nim, u.nim) });
+      const userData = {
+        name: u.name,
+        role: u.role,
+        isActive: true,
+        periodId,
+        divisionId: u.division ? divisionMap[u.division] : null,
+        passwordHash: hash,
+      };
+
+      if (existing) {
+        await db.update(users).set(userData).where(eq(users.id, existing.id));
+      } else {
+        await db.insert(users).values({
+          id: crypto.randomUUID(),
           nim: u.nim,
-          name: u.name,
-          role: u.role,
-          isActive: true,
-          periodId,
-          divisionId: u.division ? divisionMap[u.division] : null,
-          passwordHash: hash,
-        },
-      });
+          ...userData
+        });
+      }
       console.log(`Upserted user ${u.nim}`);
     } catch (err) {
       console.error(`Failed to upsert user ${u.nim}`, err);
@@ -234,8 +254,8 @@ async function seedUsers(periodId: string, divisionMap: Record<string, string>) 
   }
   console.log(`Seeded/updated ${DEFAULT_USERS.length} default users.`);
 
-  const users = await prisma.user.findMany({ select: { id: true, nim: true } });
-  return users.reduce<Record<string, string>>((acc, u) => {
+  const usersData = await db.query.users.findMany({ columns: { id: true, nim: true } });
+  return usersData.reduce<Record<string, string>>((acc: Record<string, string>, u: any) => {
     acc[u.nim] = u.id;
     return acc;
   }, {});
@@ -254,7 +274,4 @@ main()
   .catch((err) => {
     console.error(err);
     process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
   });

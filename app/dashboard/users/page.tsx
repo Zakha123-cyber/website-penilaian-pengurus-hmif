@@ -2,8 +2,12 @@ import React from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 
-import { Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
+import { users as usersTable, periods, divisions as divisionsTable } from "@/lib/schema";
+import { eq, desc, asc, and } from "drizzle-orm";
 
 import { Info, Pencil, Trash2 } from "lucide-react";
 
@@ -20,7 +24,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
 import { createUserSchema, updateUserSchema } from "@/lib/validation";
 
 const roles = [
@@ -61,15 +64,69 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     const { password, ...data } = parsed.data;
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Simpan user ke database
     try {
-      await prisma.user.create({ data: { ...data, passwordHash } });
-      revalidatePath("/dashboard/users");
-      redirect(`/dashboard/users?success=${encodeURIComponent("User ditambahkan")}&alert=success`);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      await db.insert(usersTable).values({ id: crypto.randomUUID(), ...data, passwordHash });
+    } catch (error: any) {
+      if (error?.code === "ER_DUP_ENTRY" || error?.message?.includes("Duplicate entry")) {
         redirect(`/dashboard/users?success=${encodeURIComponent("NIM sudah digunakan")}&alert=error`);
       }
       throw error;
+    }
+
+    revalidatePath("/dashboard/users");
+
+    // Kirim email berisi password jika user memiliki email
+    if (data.email) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || "smtp.gmail.com",
+          port: Number(process.env.SMTP_PORT) || 587,
+          secure: process.env.SMTP_SECURE === "true",
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
+
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || '"Admin Sistem" <admin@hmif.com>',
+          to: data.email,
+          subject: "Akun Anda Telah Dibuat – Sistem Penilaian HMIF",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #f9f9f9;">
+              <div style="background-color: #1a5632; padding: 20px 24px; border-radius: 8px 8px 0 0;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Akun Anda Telah Dibuat</h1>
+              </div>
+              <div style="background-color: #ffffff; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e0e0e0;">
+                <p style="margin-top: 0;">Halo, <strong>${data.name}</strong>,</p>
+                <p>Akun Anda telah berhasil didaftarkan di <strong>Sistem Penilaian Pengurus HMIF</strong>. Berikut adalah informasi login Anda:</p>
+                <div style="background-color: #f0f7f3; border-left: 4px solid #1a5632; padding: 16px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 0 0 8px 0; font-size: 14px;"><span style="color: #555;">Username (NIM):</span> <strong>${data.nim}</strong></p>
+                  <p style="margin: 0; font-size: 14px;"><span style="color: #555;">Password:</span> <strong style="font-family: monospace; font-size: 16px; letter-spacing: 1px;">${password}</strong></p>
+                </div>
+                <p style="font-size: 14px; color: #555;">Silakan login di aplikasi menggunakan kredensial di atas:</p>
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${appUrl}/login" style="display: inline-block; padding: 12px 28px; background-color: #1a5632; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px;">
+                    Login Sekarang
+                  </a>
+                </div>
+                <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; margin-bottom: 0;">Demi keamanan, segera ganti password Anda setelah login pertama kali. Jika Anda tidak merasa membuat akun ini, harap hubungi administrator.</p>
+              </div>
+            </div>
+          `,
+        });
+
+        redirect(`/dashboard/users?success=${encodeURIComponent("User ditambahkan & email terkirim")}&alert=success`);
+      } catch (err) {
+        if (isRedirectError(err)) throw err;
+        // Gagal kirim email, tapi user sudah berhasil dibuat
+        redirect(`/dashboard/users?success=${encodeURIComponent("User ditambahkan (email gagal dikirim)")}&alert=success`);
+      }
+    } else {
+      redirect(`/dashboard/users?success=${encodeURIComponent("User ditambahkan")}&alert=success`);
     }
   }
 
@@ -99,11 +156,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     if (password) updateData.passwordHash = await bcrypt.hash(password, 10);
 
     try {
-      await prisma.user.update({ where: { id }, data: updateData });
+      await db.update(usersTable).set(updateData).where(eq(usersTable.id, id));
       revalidatePath("/dashboard/users");
       redirect(`/dashboard/users?success=${encodeURIComponent("User diperbarui")}&alert=success`);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    } catch (error: any) {
+      if (error?.code === "ER_DUP_ENTRY" || error?.message?.includes("Duplicate entry")) {
         redirect(`/dashboard/users?success=${encodeURIComponent("NIM sudah digunakan")}&alert=error`);
       }
       throw error;
@@ -117,18 +174,20 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
-    await prisma.user.delete({ where: { id } });
+    await db.delete(usersTable).where(eq(usersTable.id, id));
     revalidatePath("/dashboard/users");
     redirect(`/dashboard/users?success=${encodeURIComponent("User dihapus")}&alert=success`);
   }
 
-  const [activePeriod, periods, divisions, users, currentUser] = await Promise.all([
-    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
-    prisma.period.findMany({ orderBy: { startYear: "desc" } }),
-    prisma.division.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { users: true } } } }),
-    prisma.user.findMany({ orderBy: { name: "asc" }, include: { period: true, division: true } }),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+  const [activePeriod, periodsData, divisionsData, allUsersData, currentUser] = await Promise.all([
+    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findMany({ orderBy: [desc(periods.startYear)] }),
+    db.query.divisions.findMany({ orderBy: [asc(divisionsTable.name)], with: { users: { columns: { id: true } } } }),
+    db.query.users.findMany({ orderBy: [asc(usersTable.name)], with: { period: true, division: true } }),
+    session.userId ? db.query.users.findFirst({ where: eq(usersTable.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
+
+  const users = allUsersData;
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const alert = params?.alert;
@@ -141,11 +200,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     { label: "Total User", value: totalUsers },
     { label: "Aktif", value: activeUsers },
     { label: "Nonaktif", value: inactiveUsers },
-    { label: "Divisi", value: divisions.length },
-    { label: "Periode", value: periods.length },
+    { label: "Divisi", value: divisionsData.length },
+    { label: "Periode", value: periodsData.length },
   ];
 
-  const divisionStats = divisions.map((d) => ({ id: d.id, name: d.name, count: d._count.users }));
+  const divisionStats = divisionsData.map((d) => ({ id: d.id, name: d.name, count: d.users.length }));
 
   const sidebarStyle = {
     "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -201,7 +260,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                     <label className="text-sm font-medium text-foreground">
                       Periode
                       <select name="periodId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {periods.map((p) => (
+                        {periodsData.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
@@ -212,7 +271,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                       Divisi
                       <select name="divisionId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
                         <option value="">(Tanpa divisi)</option>
-                        {divisions.map((d) => (
+                        {divisionsData.map((d) => (
                           <option key={d.id} value={d.id}>
                             {d.name}
                           </option>
@@ -401,7 +460,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                   <label className="text-sm font-medium text-foreground">
                                     Periode
                                     <select name="periodId" defaultValue={user.periodId} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                      {periods.map((p) => (
+                                      {periodsData.map((p) => (
                                         <option key={p.id} value={p.id}>
                                           {p.name}
                                         </option>
@@ -412,7 +471,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                     Divisi
                                     <select name="divisionId" defaultValue={user.divisionId ?? ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
                                       <option value="">(Tanpa divisi)</option>
-                                      {divisions.map((d) => (
+                                      {divisionsData.map((d) => (
                                         <option key={d.id} value={d.id}>
                                           {d.name}
                                         </option>

@@ -10,7 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { isSuperAdmin } from "@/lib/permissions";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users, periods } from "@/lib/schema";
+import { eq, desc } from "drizzle-orm";
 import { getMonthlyRank, getAvailableMonths } from "@/services/monthly-rank";
 
 type PageProps = { searchParams: Promise<Record<string, string | undefined>> };
@@ -22,9 +24,9 @@ export default async function MonthlyRankPage({ searchParams }: PageProps) {
     if (!isSuperAdmin(session.role)) redirect("/dashboard");
 
     const [activePeriod, currentUser] = await Promise.all([
-        prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
+        db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
         session.userId
-            ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } })
+            ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } })
             : Promise.resolve(null),
     ]);
 

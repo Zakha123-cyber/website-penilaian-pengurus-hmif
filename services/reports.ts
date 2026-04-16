@@ -1,41 +1,94 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { evaluationEvents, evaluations, indicatorSnapshots, periods, prokers, users, divisions, evaluationScores } from "@/lib/schema";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { isKadivPSDM } from "@/lib/permissions";
 import { exportEventToXlsx } from "@/utils/excel";
 
 type Session = { userId: string; role: string; periodId: string };
 
 export async function getEventReport(eventId: string, session: Session) {
-  const event = await prisma.evaluationEvent.findUnique({
-    where: { id: eventId },
-    include: {
+  const event = await db.query.evaluationEvents.findFirst({
+    where: eq(evaluationEvents.id, eventId),
+    with: {
       period: true,
       proker: true,
-      indicators: { include: { indicator: true } },
+      indicators: { with: { indicator: true } },
     },
   });
 
   if (!event) throw new Error("Event tidak ditemukan");
 
-  const requester = await prisma.user.findUnique({ where: { id: session.userId }, include: { division: true } });
+  const requester = await db.query.users.findFirst({
+    where: eq(users.id, session.userId),
+    with: { division: true }
+  });
   const requesterDivisionId = requester?.divisionId ?? null;
   const requesterDivisionName = requester?.division?.name ?? null;
   const kadivScopeAll = isKadivPSDM(session.role, requesterDivisionName);
 
-  const baseWhere = session.role === "KADIV" && !kadivScopeAll && requesterDivisionId ? { eventId, evaluatee: { divisionId: requesterDivisionId } } : { eventId };
+  const useDivisionFilter = session.role === "KADIV" && !kadivScopeAll && requesterDivisionId;
 
-  const [evaluations, assignmentsCount, submissionsCount, evaluatorDistinct, evaluateeDistinct] = await Promise.all([
-    prisma.evaluation.findMany({
-      where: { ...baseWhere, scores: { some: {} } },
-      include: {
-        evaluatee: { include: { division: true } },
-        scores: { include: { indicatorSnapshot: { include: { indicator: true } } } },
-      },
-    }),
-    prisma.evaluation.count({ where: baseWhere }),
-    prisma.evaluation.count({ where: { ...baseWhere, scores: { some: {} } } }),
-    prisma.evaluation.findMany({ where: baseWhere, select: { evaluatorId: true }, distinct: ["evaluatorId"] }),
-    prisma.evaluation.findMany({ where: baseWhere, select: { evaluateeId: true }, distinct: ["evaluateeId"] }),
-  ]);
+  // Assignments Count
+  let assignmentQuery = db.select({ count: sql<number>`count(*)` }).from(evaluations).$dynamic();
+  if (useDivisionFilter) {
+    assignmentQuery = assignmentQuery.innerJoin(users, eq(evaluations.evaluateeId, users.id)).where(and(eq(evaluations.eventId, eventId), eq(users.divisionId, requesterDivisionId!)));
+  } else {
+    assignmentQuery = assignmentQuery.where(eq(evaluations.eventId, eventId));
+  }
+  const [assignmentRow] = await assignmentQuery;
+  const assignmentsCount = Number(assignmentRow?.count ?? 0);
+
+  // Submissions Count (evaluations with scores)
+  const submittedSubquery = db.select({ evaluationId: evaluationScores.evaluationId })
+    .from(evaluationScores)
+    .groupBy(evaluationScores.evaluationId)
+    .as("submitted_evals");
+
+  let submissionQuery = db.select({ count: sql<number>`count(*)` })
+    .from(evaluations)
+    .innerJoin(submittedSubquery, eq(evaluations.id, submittedSubquery.evaluationId))
+    .$dynamic();
+
+  if (useDivisionFilter) {
+    submissionQuery = submissionQuery.innerJoin(users, eq(evaluations.evaluateeId, users.id)).where(and(eq(evaluations.eventId, eventId), eq(users.divisionId, requesterDivisionId!)));
+  } else {
+    submissionQuery = submissionQuery.where(eq(evaluations.eventId, eventId));
+  }
+  const [submissionRow] = await submissionQuery;
+  const submissionsCount = Number(submissionRow?.count ?? 0);
+
+  // Evaluators Count
+  let evaluatorQuery = db.selectDistinct({ id: evaluations.evaluatorId }).from(evaluations).$dynamic();
+  if (useDivisionFilter) {
+    evaluatorQuery = evaluatorQuery.innerJoin(users, eq(evaluations.evaluateeId, users.id)).where(and(eq(evaluations.eventId, eventId), eq(users.divisionId, requesterDivisionId!)));
+  } else {
+    evaluatorQuery = evaluatorQuery.where(eq(evaluations.eventId, eventId));
+  }
+  const evaluatorDistinct = await evaluatorQuery;
+
+  // Evaluatees Count
+  let evaluateeDistinctQuery = db.selectDistinct({ id: evaluations.evaluateeId }).from(evaluations).$dynamic();
+  if (useDivisionFilter) {
+    evaluateeDistinctQuery = evaluateeDistinctQuery.innerJoin(users, eq(evaluations.evaluateeId, users.id)).where(and(eq(evaluations.eventId, eventId), eq(users.divisionId, requesterDivisionId!)));
+  } else {
+    evaluateeDistinctQuery = evaluateeDistinctQuery.where(eq(evaluations.eventId, eventId));
+  }
+  const evaluateeDistinct = await evaluateeDistinctQuery;
+
+  // Detailed Evaluations
+  const evaluationsData = await db.query.evaluations.findMany({
+    where: eq(evaluations.eventId, eventId),
+    with: {
+      evaluatee: { with: { division: true } },
+      scores: { with: { indicatorSnapshot: { with: { indicator: true } } } },
+    },
+  });
+
+  const filteredEvaluations = evaluationsData.filter((ev: any) => {
+    if (ev.scores.length === 0) return false;
+    if (useDivisionFilter && ev.evaluatee.divisionId !== requesterDivisionId) return false;
+    return true;
+  });
 
   const byEvaluatee: Record<
     string,
@@ -51,7 +104,7 @@ export async function getEventReport(eventId: string, session: Session) {
     }
   > = {};
 
-  for (const ev of evaluations) {
+  for (const ev of filteredEvaluations) {
     const key = ev.evaluateeId;
     if (!byEvaluatee[key]) {
       byEvaluatee[key] = {
@@ -69,7 +122,7 @@ export async function getEventReport(eventId: string, session: Session) {
     const bucket = byEvaluatee[key];
     bucket.raterCount += 1;
 
-    const totalScore = ev.scores.reduce((acc, s) => acc + s.score, 0);
+    const totalScore = ev.scores.reduce((acc: number, s: any) => acc + s.score, 0);
     const avgScore = ev.scores.length ? totalScore / ev.scores.length : 0;
     bucket.overallAvg += avgScore;
 
@@ -80,7 +133,7 @@ export async function getEventReport(eventId: string, session: Session) {
 
     for (const s of ev.scores) {
       const indId = s.indicatorSnapshot.indicatorId;
-      const existing = bucket.indicators.find((i) => i.id === indId);
+      const existing = bucket.indicators.find((i: any) => i.id === indId);
       if (existing) existing.avg += s.score;
       else bucket.indicators.push({ id: indId, name: s.indicatorSnapshot.indicator.name, category: s.indicatorSnapshot.indicator.category, avg: s.score });
     }
@@ -90,10 +143,10 @@ export async function getEventReport(eventId: string, session: Session) {
 
   const results = Object.values(byEvaluatee).map((item) => {
     const divisor = item.raterCount || 1;
-    const indicators = item.indicators.map((i) => ({ ...i, avg: i.avg / divisor }));
+    const indicators = item.indicators.map((i: any) => ({ ...i, avg: i.avg / divisor }));
     const categoryAvg: Record<string, number> = {};
     for (const [cat, sum] of Object.entries(item.categoryAvg)) {
-      categoryAvg[cat] = sum / divisor;
+      categoryAvg[cat] = (sum as number) / divisor;
     }
     return {
       ...item,
@@ -112,7 +165,7 @@ export async function getEventReport(eventId: string, session: Session) {
       proker: event.proker?.name ?? null,
       startDate: event.startDate,
       endDate: event.endDate,
-      indicators: event.indicators.map((i) => ({ id: i.id, name: i.indicator.name, category: i.indicator.category })),
+      indicators: event.indicators.map((i: any) => ({ id: i.id, name: i.indicator.name, category: i.indicator.category })),
     },
     results,
     stats: {
@@ -136,7 +189,7 @@ export async function exportEventReport(eventId: string, session: Session): Prom
     } else {
       let first = true;
       for (const [cat, val] of Object.entries(r.categoryAvg)) {
-        lines.push(`"${r.name}","${r.division ?? ""}",${first ? r.raterCount : ""},${first ? r.overallAvg.toFixed(2) : ""},${cat},${val.toFixed(2)}`);
+        lines.push(`"${r.name}","${r.division ?? ""}",${first ? r.raterCount : ""},${first ? r.overallAvg.toFixed(2) : ""},${cat},${(val as number).toFixed(2)}`);
         first = false;
       }
     }

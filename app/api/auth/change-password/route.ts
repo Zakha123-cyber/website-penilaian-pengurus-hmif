@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users } from "@/lib/schema";
 import { authenticate, getSession, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
 import { changePasswordSchema } from "@/lib/validation";
 import { logAudit } from "@/lib/audit";
+import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
   if (!user || !user.isActive) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -28,7 +30,10 @@ export async function POST(req: Request) {
   }
 
   const newHash = await bcrypt.hash(parsed.data.newPassword, 10);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash, passwordUpdatedAt: new Date() } as any });
+  await db
+    .update(users)
+    .set({ passwordHash: newHash, passwordUpdatedAt: new Date() })
+    .where(eq(users.id, user.id));
 
   // Refresh session cookie to extend expiry
   const { token } = await authenticate(user.nim, parsed.data.newPassword);

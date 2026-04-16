@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { periods } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { createPeriodSchema } from "@/lib/validation";
+import { desc } from "drizzle-orm";
 
 export async function GET() {
   const session = await getSession();
@@ -13,11 +15,8 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const periods = await prisma.period.findMany({
-    orderBy: { startYear: "desc" },
-  });
-
-  return NextResponse.json({ periods });
+  const result = await db.select().from(periods).orderBy(desc(periods.startYear));
+  return NextResponse.json({ periods: result });
 }
 
 export async function POST(request: Request) {
@@ -38,12 +37,18 @@ export async function POST(request: Request) {
   const { name, startYear, endYear, isActive } = parsed.data;
 
   if (isActive) {
-    await prisma.period.updateMany({ data: { isActive: false } });
+    await db.update(periods).set({ isActive: false });
   }
 
-  const period = await prisma.period.create({
-    data: { name, startYear, endYear, isActive: !!isActive },
+  const id = crypto.randomUUID();
+  await db.insert(periods).values({
+    id,
+    name,
+    startYear,
+    endYear,
+    isActive: !!isActive,
+    createdAt: new Date(),
   });
 
-  return NextResponse.json({ period }, { status: 201 });
+  return NextResponse.json({ period: { id, name, startYear, endYear, isActive: !!isActive } }, { status: 201 });
 }

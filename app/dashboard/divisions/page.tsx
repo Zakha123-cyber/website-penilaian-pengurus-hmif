@@ -16,7 +16,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { divisions, users, periods } from "@/lib/schema";
+import { eq, sql, desc, asc } from "drizzle-orm";
 import { createDivisionSchema } from "@/lib/validation";
 
 type DivisionsPageProps = { searchParams: Promise<Record<string, string | undefined>> };
@@ -37,7 +39,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
     const parsed = createDivisionSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    await prisma.division.create({ data: parsed.data });
+    await db.insert(divisions).values({ id: crypto.randomUUID(), ...parsed.data });
     revalidatePath("/dashboard/divisions");
     redirect(`/dashboard/divisions?success=${encodeURIComponent("Divisi ditambahkan")}&alert=success`);
   }
@@ -53,7 +55,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
     const parsed = createDivisionSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    await prisma.division.update({ where: { id }, data: parsed.data });
+    await db.update(divisions).set(parsed.data).where(eq(divisions.id, id));
     revalidatePath("/dashboard/divisions");
     redirect(`/dashboard/divisions?success=${encodeURIComponent("Divisi diperbarui")}&alert=success`);
   }
@@ -65,22 +67,32 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
-    await prisma.division.delete({ where: { id } });
+    await db.delete(divisions).where(eq(divisions.id, id));
     revalidatePath("/dashboard/divisions");
     redirect(`/dashboard/divisions?success=${encodeURIComponent("Divisi dihapus")}&alert=success`);
   }
 
-  const [activePeriod, divisions, currentUser] = await Promise.all([
-    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
-    prisma.division.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { users: true } } } }),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+  const [activePeriod, rawDivisions, currentUser] = await Promise.all([
+    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.divisions.findMany({
+      orderBy: [asc(divisions.name)],
+      with: {
+        users: { columns: { id: true } },
+      },
+    }),
+    session.userId ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
+
+  const divisionsData = rawDivisions.map(d => ({
+    ...d,
+    _count: { users: d.users.length }
+  }));
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const alert = params?.alert;
 
-  const totalDivisions = divisions.length;
-  const totalUsers = divisions.reduce((sum, d) => sum + d._count.users, 0);
+  const totalDivisions = divisionsData.length;
+  const totalUsers = divisionsData.reduce((sum, d) => sum + d._count.users, 0);
 
   const sidebarStyle = {
     "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -164,7 +176,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {divisions.map((division) => (
+                    {divisionsData.map((division) => (
                       <TableRow key={division.id}>
                         <TableCell className="pl-4 font-medium">{division.name}</TableCell>
                         <TableCell className="text-muted-foreground">{division._count.users} anggota</TableCell>
@@ -205,7 +217,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
                         </TableCell>
                       </TableRow>
                     ))}
-                    {divisions.length === 0 && (
+                    {divisionsData.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
                           Belum ada divisi.

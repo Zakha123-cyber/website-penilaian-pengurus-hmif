@@ -17,13 +17,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getSession } from "@/lib/auth";
 import { generateAssignmentsForEvent } from "@/lib/assignment-generator";
 import { canManageRoles } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { periods, prokers, indicators, evaluationEvents, indicatorSnapshots, evaluations, evaluationScores, users } from "@/lib/schema";
+import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { createEventSchema, updateEventSchema } from "@/lib/validation";
 
 const eventTypes = [
   { value: "PERIODIC", label: "Periodik" },
   { value: "PROKER", label: "Proker" },
-];
+] as const;
 
 type EventsPageProps = { searchParams: Promise<Record<string, string | undefined>> };
 
@@ -56,25 +58,31 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
 
       const { name, type, periodId, prokerId, startDate, endDate, isOpen, indicatorIds } = parsed.data;
 
-      await prisma.$transaction(async (tx) => {
-        const created = await tx.evaluationEvent.create({
-          data: {
-            name,
-            type,
-            periodId,
-            prokerId: type === "PROKER" ? prokerId : null,
-            startDate,
-            endDate,
-            isOpen,
-          },
+      const newId = crypto.randomUUID();
+      await db.transaction(async (tx) => {
+        await tx.insert(evaluationEvents).values({
+          id: newId,
+          name,
+          type: type as "PERIODIC" | "PROKER",
+          periodId,
+          prokerId: type === "PROKER" ? prokerId : null,
+          startDate,
+          endDate,
+          isOpen,
         });
 
         if (indicatorIds.length) {
-          await tx.indicatorSnapshot.createMany({ data: indicatorIds.map((indicatorId) => ({ indicatorId, eventId: created.id })) });
+          const snapshotsToInsert = indicatorIds.map((indicatorId) => ({
+            id: crypto.randomUUID(),
+            indicatorId,
+            eventId: newId
+          }));
+          await tx.insert(indicatorSnapshots).values(snapshotsToInsert);
         }
-
-        await generateAssignmentsForEvent(tx, created);
       });
+
+      // Generate assignments (uses global db, but run after TX is committed for safety or if TX passed)
+      await generateAssignmentsForEvent({ id: newId, type: type as "PERIODIC" | "PROKER", periodId, prokerId });
 
       revalidatePath("/dashboard/events");
       redirect(`/dashboard/events?success=${encodeURIComponent("Event dibuat")}&alert=success`);
@@ -104,11 +112,17 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
       const parsed = updateEventSchema.safeParse(raw);
       if (!parsed.success) throw new Error("Input tidak valid");
 
-      const hasSubmissions = await prisma.evaluationScore.count({ where: { evaluation: { eventId: id } } });
-      if (hasSubmissions > 0) {
-        await prisma.evaluationEvent.update({ where: { id }, data: { isOpen: parsed.data.isOpen } });
+      const submissionCountResult = await db.select({ count: sql<number>`count(*)` })
+        .from(evaluationScores)
+        .innerJoin(evaluations, eq(evaluationScores.evaluationId, evaluations.id))
+        .where(eq(evaluations.eventId, id));
+
+      const hasSubmissions = Number(submissionCountResult[0]?.count ?? 0) > 0;
+
+      if (hasSubmissions) {
+        await db.update(evaluationEvents).set({ isOpen: parsed.data.isOpen }).where(eq(evaluationEvents.id, id));
       } else {
-        await prisma.evaluationEvent.update({ where: { id }, data: parsed.data });
+        await db.update(evaluationEvents).set(parsed.data).where(eq(evaluationEvents.id, id));
       }
       revalidatePath("/dashboard/events");
       redirect(`/dashboard/events?success=${encodeURIComponent("Event diperbarui")}&alert=success`);
@@ -129,11 +143,17 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
     const id = String(formData.get("id") ?? "");
 
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.evaluationScore.deleteMany({ where: { evaluation: { eventId: id } } });
-        await tx.evaluation.deleteMany({ where: { eventId: id } });
-        await tx.indicatorSnapshot.deleteMany({ where: { eventId: id } });
-        await tx.evaluationEvent.delete({ where: { id } });
+      await db.transaction(async (tx) => {
+        // Find relevant evaluation IDs
+        const evals = await tx.select({ id: evaluations.id }).from(evaluations).where(eq(evaluations.eventId, id));
+        const evalIds = evals.map(e => e.id);
+
+        if (evalIds.length > 0) {
+          await tx.delete(evaluationScores).where(inArray(evaluationScores.evaluationId, evalIds));
+          await tx.delete(evaluations).where(inArray(evaluations.id, evalIds));
+        }
+        await tx.delete(indicatorSnapshots).where(eq(indicatorSnapshots.eventId, id));
+        await tx.delete(evaluationEvents).where(eq(evaluationEvents.id, id));
       });
       revalidatePath("/dashboard/events");
       redirect(`/dashboard/events?success=${encodeURIComponent("Event dihapus")}&alert=success`);
@@ -145,38 +165,48 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
     }
   }
 
-  const [activePeriod, periods, prokers, indicators, events, currentUser] = await Promise.all([
-    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
-    prisma.period.findMany({ orderBy: { startYear: "desc" } }),
-    prisma.proker.findMany({ orderBy: { name: "asc" }, include: { period: true } }),
-    prisma.indicator.findMany({ where: { isActive: true }, orderBy: [{ category: "asc" }, { name: "asc" }] }),
-    prisma.evaluationEvent.findMany({
-      orderBy: { startDate: "desc" },
-      include: {
+  const [activePeriod, periodsData, prokersData, indicatorsData, eventsData, currentUser] = await Promise.all([
+    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findMany({ orderBy: [desc(periods.startYear)] }),
+    db.query.prokers.findMany({
+      orderBy: [asc(prokers.name)],
+      with: { period: true }
+    }),
+    db.query.indicators.findMany({
+      where: eq(indicators.isActive, true),
+      orderBy: [asc(indicators.category), asc(indicators.name)]
+    }),
+    db.query.evaluationEvents.findMany({
+      orderBy: [desc(evaluationEvents.startDate)],
+      with: {
         period: true,
         proker: true,
-        indicators: { include: { indicator: true } },
+        indicators: { with: { indicator: true } },
       },
     }),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+    session.userId ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
 
-  const eventIds = events.map((ev) => ev.id);
-  const submissionEvents = eventIds.length
-    ? await prisma.evaluationScore.findMany({
-        where: { evaluation: { eventId: { in: eventIds } } },
-        select: { evaluation: { select: { eventId: true } } },
-      })
-    : [];
-  const submissionSet = new Set(submissionEvents.map((s) => s.evaluation.eventId));
+  const eventIds = eventsData.map((ev) => ev.id);
+  let submissionSet = new Set<string>();
+
+  if (eventIds.length > 0) {
+    const submissionEvents = await db.select({ eventId: evaluations.eventId })
+      .from(evaluationScores)
+      .innerJoin(evaluations, eq(evaluationScores.evaluationId, evaluations.id))
+      .where(inArray(evaluations.eventId, eventIds))
+      .groupBy(evaluations.eventId);
+
+    submissionSet = new Set(submissionEvents.map((s) => s.eventId));
+  }
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const error = params?.error ? decodeURIComponent(params.error) : undefined;
-  const alert = (params?.alert as "success" | "error" | "info") ?? (error ? "error" : "success");
+  const alertType = (params?.alert as "success" | "error" | "info") ?? (error ? "error" : "success");
 
-  const totalEvents = events.length;
-  const openEvents = events.filter((e) => e.isOpen).length;
-  const prokerEvents = events.filter((e) => e.type === "PROKER").length;
+  const totalEvents = eventsData.length;
+  const openEvents = eventsData.filter((e) => e.isOpen).length;
+  const prokerEvents = eventsData.filter((e) => e.type === "PROKER").length;
   const periodicEvents = totalEvents - prokerEvents;
 
   const sidebarStyle = {
@@ -189,7 +219,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
       <SiteHeader title="Event" activePeriod={activePeriod?.name ?? "-"} />
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-          <SuccessAlert message={success ?? error} type={alert} />
+          <SuccessAlert message={success ?? error} type={alertType} />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -224,7 +254,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                     <label className="text-sm font-medium text-foreground">
                       Periode
                       <select name="periodId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {periods.map((p) => (
+                        {periodsData.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
@@ -235,7 +265,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                       Proker (khusus tipe Proker)
                       <select name="prokerId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
                         <option value="">(Kosongkan jika periodik)</option>
-                        {prokers.map((pr) => (
+                        {prokersData.map((pr) => (
                           <option key={pr.id} value={pr.id}>
                             {pr.name} · {pr.period.name}
                           </option>
@@ -255,7 +285,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                     <div className="space-y-2 rounded-lg border border-border/60 bg-card/40 p-3">
                       <p className="text-sm font-semibold text-foreground">Pilih indikator</p>
                       <div className="grid gap-2 sm:grid-cols-2">
-                        {indicators.map((ind) => (
+                        {indicatorsData.map((ind) => (
                           <label key={ind.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
                             <input name="indicatorIds" value={ind.id} type="checkbox" className="h-4 w-4 rounded border-border" />
                             <span>
@@ -263,7 +293,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                             </span>
                           </label>
                         ))}
-                        {indicators.length === 0 && <div className="text-sm text-muted-foreground">Belum ada indikator aktif.</div>}
+                        {indicatorsData.length === 0 && <div className="text-sm text-muted-foreground">Belum ada indikator aktif.</div>}
                       </div>
                     </div>
                     <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
@@ -327,7 +357,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {events.map((ev) => {
+                    {eventsData.map((ev) => {
                       const hasSubmissions = submissionSet.has(ev.id);
                       return (
                         <TableRow key={ev.id}>
@@ -412,7 +442,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                         </TableRow>
                       );
                     })}
-                    {events.length === 0 && (
+                    {eventsData.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                           Belum ada event.

@@ -1,5 +1,4 @@
 import React from "react";
-import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -17,7 +16,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { prokers as prokersTable, periods, divisions, users as usersTable, panitia, evaluationEvents, evaluations, evaluationScores, indicatorSnapshots } from "@/lib/schema";
+import { eq, desc, asc, inArray, and } from "drizzle-orm";
 import { addPanitiaSchema, createProkerSchema, updateProkerSchema } from "@/lib/validation";
 
 type ProkersPageProps = { searchParams: Promise<Record<string, string | undefined>> };
@@ -43,7 +44,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
     const parsed = createProkerSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    await prisma.proker.create({ data: parsed.data });
+    await db.insert(prokersTable).values({ id: crypto.randomUUID(), ...parsed.data });
     revalidatePath("/dashboard/prokers");
     redirect(`/dashboard/prokers?success=${encodeURIComponent("Proker ditambahkan")}&alert=success`);
   }
@@ -64,7 +65,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
     const parsed = updateProkerSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    await prisma.proker.update({ where: { id }, data: parsed.data });
+    await db.update(prokersTable).set(parsed.data).where(eq(prokersTable.id, id));
     revalidatePath("/dashboard/prokers");
     redirect(`/dashboard/prokers?success=${encodeURIComponent("Proker diperbarui")}&alert=success`);
   }
@@ -76,28 +77,27 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const id = String(formData.get("id") ?? "");
-    const events = await prisma.evaluationEvent.findMany({ where: { prokerId: id }, select: { id: true } });
-    const eventIds = events.map((e) => e.id);
 
-    const evaluations = eventIds.length ? await prisma.evaluation.findMany({ where: { eventId: { in: eventIds } }, select: { id: true } }) : [];
-    const evaluationIds = evaluations.map((e) => e.id);
+    await db.transaction(async (tx) => {
+      const events = await tx.select({ id: evaluationEvents.id }).from(evaluationEvents).where(eq(evaluationEvents.prokerId, id));
+      const eventIds = events.map((e) => e.id);
 
-    const ops: Prisma.PrismaPromise<unknown>[] = [];
+      if (eventIds.length) {
+        const batchEvaluations = await tx.select({ id: evaluations.id }).from(evaluations).where(inArray(evaluations.eventId, eventIds));
+        const evaluationIds = batchEvaluations.map((e) => e.id);
 
-    if (evaluationIds.length) {
-      ops.push(prisma.evaluationScore.deleteMany({ where: { evaluationId: { in: evaluationIds } } }));
-      ops.push(prisma.evaluation.deleteMany({ where: { id: { in: evaluationIds } } }));
-    }
+        if (evaluationIds.length) {
+          await tx.delete(evaluationScores).where(inArray(evaluationScores.evaluationId, evaluationIds));
+          await tx.delete(evaluations).where(inArray(evaluations.id, evaluationIds));
+        }
 
-    if (eventIds.length) {
-      ops.push(prisma.indicatorSnapshot.deleteMany({ where: { eventId: { in: eventIds } } }));
-      ops.push(prisma.evaluationEvent.deleteMany({ where: { id: { in: eventIds } } }));
-    }
+        await tx.delete(indicatorSnapshots).where(inArray(indicatorSnapshots.eventId, eventIds));
+        await tx.delete(evaluationEvents).where(inArray(evaluationEvents.id, eventIds));
+      }
 
-    ops.push(prisma.panitia.deleteMany({ where: { prokerId: id } }));
-    ops.push(prisma.proker.delete({ where: { id } }));
-
-    await prisma.$transaction(ops);
+      await tx.delete(panitia).where(eq(panitia.prokerId, id));
+      await tx.delete(prokersTable).where(eq(prokersTable.id, id));
+    });
     revalidatePath("/dashboard/prokers");
     redirect(`/dashboard/prokers?success=${encodeURIComponent("Proker dihapus")}&alert=success`);
   }
@@ -113,17 +113,19 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
     const parsed = addPanitiaSchema.safeParse(raw);
     if (!parsed.success) throw new Error("Input tidak valid");
 
-    const proker = await prisma.proker.findUnique({ where: { id: prokerId } });
-    if (!proker) throw new Error("Proker tidak ditemukan");
+    const prokerData = await db.query.prokers.findFirst({ where: eq(prokersTable.id, prokerId) });
+    if (!prokerData) throw new Error("Proker tidak ditemukan");
 
-    const user = await prisma.user.findUnique({ where: { id: parsed.data.userId } });
-    if (!user) throw new Error("User tidak ditemukan");
-    if (user.periodId !== proker.periodId) throw new Error("User harus pada periode yang sama");
+    const userData = await db.query.users.findFirst({ where: eq(usersTable.id, parsed.data.userId) });
+    if (!userData) throw new Error("User tidak ditemukan");
+    if (userData.periodId !== prokerData.periodId) throw new Error("User harus pada periode yang sama");
 
-    const already = await prisma.panitia.findFirst({ where: { prokerId, userId: parsed.data.userId } });
+    const already = await db.query.panitia.findFirst({
+      where: and(eq(panitia.prokerId, prokerId), eq(panitia.userId, parsed.data.userId))
+    });
     if (already) return redirect(`/dashboard/prokers?success=${encodeURIComponent("Panitia sudah terdaftar")}&alert=info`);
 
-    await prisma.panitia.create({ data: { prokerId, userId: parsed.data.userId } });
+    await db.insert(panitia).values({ id: crypto.randomUUID(), prokerId, userId: parsed.data.userId });
     revalidatePath("/dashboard/prokers");
     redirect(`/dashboard/prokers?success=${encodeURIComponent("Panitia ditambahkan")}&alert=success`);
   }
@@ -135,33 +137,35 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
     if (!canManageRoles(session.role)) redirect("/dashboard");
 
     const panitiaId = String(formData.get("panitiaId") ?? "");
-    await prisma.panitia.delete({ where: { id: panitiaId } });
+    await db.delete(panitia).where(eq(panitia.id, panitiaId));
     revalidatePath("/dashboard/prokers");
     redirect(`/dashboard/prokers?success=${encodeURIComponent("Panitia dihapus")}&alert=success`);
   }
 
-  const [activePeriod, periods, divisions, users, prokers, currentUser] = await Promise.all([
-    prisma.period.findFirst({ where: { isActive: true }, orderBy: { startYear: "desc" } }),
-    prisma.period.findMany({ orderBy: { startYear: "desc" } }),
-    prisma.division.findMany({ orderBy: { name: "asc" } }),
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, include: { division: true } }),
-    prisma.proker.findMany({
-      orderBy: { name: "asc" },
-      include: {
+  const [activePeriod, periodsData, divisionsData, usersData, prokersData, currentUser] = await Promise.all([
+    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findMany({ orderBy: [desc(periods.startYear)] }),
+    db.query.divisions.findMany({ orderBy: [asc(divisions.name)] }),
+    db.query.users.findMany({ where: eq(usersTable.isActive, true), orderBy: [asc(usersTable.name)], with: { division: true } }),
+    db.query.prokers.findMany({
+      orderBy: [asc(prokersTable.name)],
+      with: {
         division: true,
         period: true,
-        panitia: { include: { user: true } },
+        panitia: { with: { user: true } },
       },
     }),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+    session.userId ? db.query.users.findFirst({ where: eq(usersTable.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
+
+  const prokers = prokersData;
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const alert = params?.alert;
 
   const totalProkers = prokers.length;
-  const totalPanitia = prokers.reduce((sum, p) => sum + p.panitia.length, 0);
-  const totalDivisions = divisions.length;
+  const totalPanitiaCount = prokers.reduce((sum: number, p: any) => sum + p.panitia.length, 0);
+  const totalDivisionsCount = divisionsData.length;
 
   const sidebarStyle = {
     "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -197,7 +201,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                   <label className="text-sm font-medium text-foreground">
                     Divisi
                     <select name="divisionId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                      {divisions.map((d) => (
+                      {divisionsData.map((d: any) => (
                         <option key={d.id} value={d.id}>
                           {d.name}
                         </option>
@@ -207,7 +211,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                   <label className="text-sm font-medium text-foreground">
                     Periode
                     <select name="periodId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                      {periods.map((p) => (
+                      {periodsData.map((p: any) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
                         </option>
@@ -234,9 +238,9 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {[
                   { label: "Total Proker", value: totalProkers },
-                  { label: "Total Panitia", value: totalPanitia },
-                  { label: "Total Divisi", value: totalDivisions },
-                ].map((stat) => (
+                  { label: "Total Panitia", value: totalPanitiaCount },
+                  { label: "Total Divisi", value: totalDivisionsCount },
+                ].map((stat: any) => (
                   <div key={stat.label} className="border-border/60 bg-card/60 rounded-lg border px-3 py-3 shadow-xs">
                     <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{stat.label}</p>
                     <p className="text-2xl font-semibold tabular-nums">{stat.value}</p>
@@ -266,9 +270,9 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {prokers.map((proker) => {
-                      const panitiaIds = new Set(proker.panitia.map((p) => p.userId));
-                      const eligibleUsers = users.filter((u) => u.periodId === proker.periodId && u.isActive && !panitiaIds.has(u.id));
+                    {prokers.map((proker: any) => {
+                      const panitiaIds = new Set(proker.panitia.map((p: any) => p.userId));
+                      const eligibleUsers = usersData.filter((u: any) => u.periodId === proker.periodId && u.isActive && !panitiaIds.has(u.id));
                       return (
                         <TableRow key={proker.id}>
                           <TableCell className="pl-4 font-medium">{proker.name}</TableCell>
@@ -300,7 +304,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                                       <label className="text-sm font-medium text-foreground">
                                         Divisi
                                         <select name="divisionId" defaultValue={proker.divisionId} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                          {divisions.map((d) => (
+                                          {divisionsData.map((d: any) => (
                                             <option key={d.id} value={d.id}>
                                               {d.name}
                                             </option>
@@ -310,7 +314,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                                       <label className="text-sm font-medium text-foreground">
                                         Periode
                                         <select name="periodId" defaultValue={proker.periodId} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                          {periods.map((p) => (
+                                          {periodsData.map((p: any) => (
                                             <option key={p.id} value={p.id}>
                                               {p.name}
                                             </option>
@@ -328,7 +332,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                                         <form action={addPanitia} className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                           <input type="hidden" name="prokerId" value={proker.id} />
                                           <select name="userId" className="w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                            {eligibleUsers.map((u) => (
+                                            {eligibleUsers.map((u: any) => (
                                               <option key={u.id} value={u.id}>
                                                 {u.name} - {u.division?.name ?? "Tidak ada divisi"}
                                               </option>
@@ -343,7 +347,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                                       )}
 
                                       <div className="space-y-2">
-                                        {proker.panitia.map((p) => (
+                                        {proker.panitia.map((p: any) => (
                                           <div key={p.id} className="flex items-center justify-between rounded border border-border px-3 py-2 text-sm text-foreground">
                                             <span>
                                               {p.user.name} · {p.user.nim}

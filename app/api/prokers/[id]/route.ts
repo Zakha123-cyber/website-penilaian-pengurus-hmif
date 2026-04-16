@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { prokers } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { updateProkerSchema } from "@/lib/validation";
+import { eq } from "drizzle-orm";
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!canManageRoles(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const proker = await prisma.proker.findUnique({
-    where: { id: params.id },
-    include: { division: true, period: true, panitia: { include: { user: true } } },
+  const proker = await db.query.prokers.findFirst({
+    where: eq(prokers.id, params.id),
+    with: {
+      division: true,
+      period: true,
+      panitia: { with: { user: true } },
+    },
   });
 
   if (!proker) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -30,7 +36,12 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const proker = await prisma.proker.update({ where: { id: params.id }, data: parsed.data });
+  await db.update(prokers).set(parsed.data as any).where(eq(prokers.id, params.id));
+
+  const proker = await db.query.prokers.findFirst({
+    where: eq(prokers.id, params.id),
+    with: { division: true, period: true, panitia: { with: { user: true } } },
+  });
 
   return NextResponse.json({ proker });
 }
@@ -40,7 +51,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!canManageRoles(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  await prisma.proker.delete({ where: { id: params.id } });
+  await db.delete(prokers).where(eq(prokers.id, params.id));
 
   return NextResponse.json({ ok: true });
 }

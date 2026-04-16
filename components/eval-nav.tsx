@@ -4,26 +4,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-    { href: "/evaluations", label: "Ringkasan" },
-    { href: "/evaluations/open", label: "Event Dibuka" },
-    { href: "/evaluations/progress", label: "Progres" },
-    { href: "/evaluations/completed", label: "Sudah Disubmit" },
+    { href: "/evaluations", label: "Ringkasan", exact: true },
+    { href: "/evaluations/open", label: "Event Dibuka", exact: false },
+    { href: "/evaluations/progress", label: "Progres", exact: false },
+    { href: "/evaluations/completed", label: "Selesai", exact: false },
 ];
 
 export function EvalNav() {
     const pathname = usePathname();
 
     return (
-        <nav className="flex gap-1 overflow-x-auto">
+        <nav className="flex gap-0 overflow-x-auto">
             {navItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = item.exact
+                    ? pathname === item.href
+                    : pathname.startsWith(item.href);
                 return (
                     <Link
                         key={item.href}
                         href={item.href}
-                        className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${isActive
-                            ? "bg-white text-slate-900 shadow-sm border border-slate-200"
-                            : "text-slate-500 hover:text-slate-800 hover:bg-white/60"
+                        className={`relative whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors ${isActive
+                                ? "text-[#1a5632] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#1a5632] after:rounded-full"
+                                : "text-slate-500 hover:text-slate-800"
                             }`}
                     >
                         {item.label}

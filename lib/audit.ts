@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { auditLogs } from "@/lib/schema";
 
 export type AuditPayload = {
   action: string;
@@ -11,21 +12,15 @@ export type AuditPayload = {
 
 export async function logAudit(entry: AuditPayload) {
   try {
-    const client: any = prisma as any;
-    if (!client?.auditLog?.create) {
-      // Client not regenerated / migration not applied; skip logging silently.
-      return;
-    }
-
-    await client.auditLog.create({
-      data: {
-        action: entry.action,
-        userId: entry.userId ?? null,
-        success: entry.success,
-        ip: entry.ip ?? null,
-        userAgent: entry.userAgent ?? null,
-        metadata: entry.metadata ? (entry.metadata as any) : undefined,
-      },
+    await db.insert(auditLogs).values({
+      id: crypto.randomUUID(),
+      action: entry.action,
+      userId: entry.userId ?? null,
+      success: entry.success,
+      ip: entry.ip ?? null,
+      userAgent: entry.userAgent ?? null,
+      metadata: entry.metadata ?? null,
+      createdAt: new Date(),
     });
   } catch (err) {
     // Swallow errors to avoid blocking main flow

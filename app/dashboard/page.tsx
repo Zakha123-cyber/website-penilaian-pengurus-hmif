@@ -8,31 +8,58 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users, periods, divisions, prokers, evaluationEvents, evaluations, indicatorSnapshots } from "@/lib/schema";
+import { eq, count, sql } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 
-type EventWithProgress = Awaited<ReturnType<typeof fetchEvents>>[number];
+type EventWithProgress = {
+  id: string;
+  name: string;
+  type: string;
+  isOpen: boolean;
+  startDate: Date;
+  endDate: Date;
+  period: { name: string } | null;
+  proker: { name: string } | null;
+  indicators: { id: string }[];
+  _count: { evaluations: number };
+  evaluations: { scoreCount: number }[];
+};
 
-async function fetchEvents(periodId: string | null) {
+async function fetchEvents(periodId: string | null): Promise<EventWithProgress[]> {
   if (!periodId) return [];
 
-  const events = await prisma.evaluationEvent.findMany({
-    where: { periodId },
-    orderBy: { startDate: "desc" },
-    include: {
-      period: true,
-      proker: true,
-      indicators: true,
+  const events = await db.query.evaluationEvents.findMany({
+    where: eq(evaluationEvents.periodId, periodId),
+    orderBy: (e, { desc }) => [desc(e.startDate)],
+    with: {
+      period: { columns: { name: true } },
+      proker: { columns: { name: true } },
+      indicators: { columns: { id: true } },
       evaluations: {
-        include: {
-          _count: { select: { scores: true } },
-        },
+        columns: { id: true },
+        with: { scores: { columns: { id: true } } },
       },
-      _count: { select: { evaluations: true } },
     },
   });
 
-  return events;
+  const eventIds = events.map((e) => e.id);
+  const countRows = eventIds.length > 0
+    ? await db
+      .select({ eventId: evaluations.eventId, cnt: sql<number>`count(*)`.as("cnt") })
+      .from(evaluations)
+      .where(sql`${evaluations.eventId} IN (${sql.join(eventIds.map(id => sql`${id}`), sql`, `)})`)
+      .groupBy(evaluations.eventId)
+    : [];
+  const countMap: Record<string, number> = {};
+  countRows.forEach((r) => (countMap[r.eventId] = Number(r.cnt)));
+
+  return events.map((e) => ({
+    ...e,
+    _count: { evaluations: countMap[e.id] ?? 0 },
+    evaluations: e.evaluations.map((ev: any) => ({ scoreCount: ev.scores?.length ?? 0 })),
+  }));
 }
 
 function formatDate(date: Date) {
@@ -51,7 +78,7 @@ function computeProgress(event: EventWithProgress) {
     return { percent: 0, completed: 0, totalAssignments };
   }
 
-  const completedEvaluations = event.evaluations.filter((ev) => ev._count.scores >= totalIndicators).length;
+  const completedEvaluations = event.evaluations.filter((ev) => ev.scoreCount >= totalIndicators).length;
 
   const percent = Math.round((completedEvaluations / Math.max(totalAssignments, 1)) * 100);
 
@@ -59,7 +86,7 @@ function computeProgress(event: EventWithProgress) {
     percent: Math.max(0, Math.min(100, percent)),
     completed: completedEvaluations,
     totalAssignments,
-  }; 
+  };
 }
 
 export default async function Page() {
@@ -68,20 +95,30 @@ export default async function Page() {
     redirect("/login");
   }
 
-  const activePeriod = await prisma.period.findFirst({
-    where: { isActive: true },
-    orderBy: { startYear: "desc" },
+  const activePeriod = await db.query.periods.findFirst({
+    where: eq(periods.isActive, true),
+    orderBy: (p, { desc }) => [desc(p.startYear)],
   });
 
   const periodId = activePeriod?.id ?? session.periodId ?? null;
 
-  const [userCount, divisionCount, prokerCount, events, currentUser] = await Promise.all([
-    periodId ? prisma.user.count({ where: { periodId } }) : Promise.resolve(0),
-    prisma.division.count(),
-    periodId ? prisma.proker.count({ where: { periodId } }) : Promise.resolve(0),
+  const [userCountRows, divisionCountRows, prokerCountRows, events, currentUser] = await Promise.all([
+    periodId
+      ? db.select({ cnt: sql<number>`count(*)` }).from(users).where(eq(users.periodId, periodId))
+      : Promise.resolve([{ cnt: 0 }]),
+    db.select({ cnt: sql<number>`count(*)` }).from(divisions),
+    periodId
+      ? db.select({ cnt: sql<number>`count(*)` }).from(prokers).where(eq(prokers.periodId, periodId))
+      : Promise.resolve([{ cnt: 0 }]),
     fetchEvents(periodId),
-    session.userId ? prisma.user.findUnique({ where: { id: session.userId }, select: { name: true, email: true } }) : Promise.resolve(null),
+    session.userId
+      ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } })
+      : Promise.resolve(null),
   ]);
+
+  const userCount = Number(userCountRows[0]?.cnt ?? 0);
+  const divisionCount = Number(divisionCountRows[0]?.cnt ?? 0);
+  const prokerCount = Number(prokerCountRows[0]?.cnt ?? 0);
 
   const eventCount = events.length;
   const now = new Date();

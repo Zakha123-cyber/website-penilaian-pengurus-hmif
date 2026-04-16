@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { evaluations, evaluationEvents } from "@/lib/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -15,23 +17,39 @@ export default async function CompletedEventDetailPage({ params }: PageProps) {
     const session = await getSession();
     if (!session) redirect("/");
 
-    const [event, completed] = await Promise.all([
-        prisma.evaluationEvent.findUnique({
-            where: { id: eventId },
-            include: {
-                period: true,
-                proker: true,
+    const [event, allEvals] = await Promise.all([
+        db.query.evaluationEvents.findFirst({
+            where: eq(evaluationEvents.id, eventId),
+            with: {
+                period: { columns: { name: true } },
+                proker: { columns: { name: true } },
             },
         }),
-        prisma.evaluation.findMany({
-            where: { evaluatorId: session.userId, eventId, scores: { some: {} } },
-            include: {
-                evaluatee: { include: { division: true } },
-                scores: { include: { indicatorSnapshot: { include: { indicator: true } } } },
+        db.query.evaluations.findMany({
+            where: and(
+                eq(evaluations.evaluatorId, session.userId),
+                eq(evaluations.eventId, eventId)
+            ),
+            orderBy: [desc(evaluations.createdAt)],
+            with: {
+                evaluatee: {
+                    columns: { name: true },
+                    with: { division: { columns: { name: true } } },
+                },
+                scores: {
+                    with: {
+                        indicatorSnapshot: {
+                            with: { indicator: { columns: { name: true } } },
+                            columns: { id: true },
+                        },
+                    },
+                    columns: { id: true, score: true },
+                },
             },
-            orderBy: { createdAt: "desc" },
         }),
     ]);
+
+    const completed = allEvals.filter((ev: any) => ev.scores.length > 0);
 
     if (!event) {
         redirect("/evaluations/completed?error=Event%20tidak%20ditemukan");

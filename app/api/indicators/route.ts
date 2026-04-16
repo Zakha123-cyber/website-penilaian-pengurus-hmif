@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { indicators } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { createIndicatorSchema } from "@/lib/validation";
+import { asc } from "drizzle-orm";
 
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!canManageRoles(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const indicators = await prisma.indicator.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
-  return NextResponse.json({ indicators });
+  const result = await db
+    .select()
+    .from(indicators)
+    .orderBy(asc(indicators.category), asc(indicators.name));
+
+  return NextResponse.json({ indicators: result });
 }
 
 export async function POST(request: Request) {
@@ -24,7 +30,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const indicator = await prisma.indicator.create({ data: parsed.data });
+  const id = crypto.randomUUID();
+  await db.insert(indicators).values({
+    id,
+    name: parsed.data.name,
+    category: parsed.data.category,
+    isActive: parsed.data.isActive ?? true,
+    createdAt: new Date(),
+  });
 
-  return NextResponse.json({ indicator }, { status: 201 });
+  return NextResponse.json({ indicator: { id, ...parsed.data } }, { status: 201 });
 }

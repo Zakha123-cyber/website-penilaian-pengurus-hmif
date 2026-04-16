@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { evaluations } from "@/lib/schema";
+import { eq, desc } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -10,13 +12,16 @@ export default async function CompletedPage() {
     const session = await getSession();
     if (!session) redirect("/");
 
-    const completed = await prisma.evaluation.findMany({
-        where: { evaluatorId: session.userId, scores: { some: {} } },
-        include: {
-            event: true,
+    const allEvaluations = await db.query.evaluations.findMany({
+        where: eq(evaluations.evaluatorId, session.userId),
+        orderBy: [desc(evaluations.createdAt)],
+        with: {
+            event: { columns: { id: true, name: true, type: true, startDate: true, endDate: true } },
+            scores: { columns: { id: true } },
         },
-        orderBy: { createdAt: "desc" },
     });
+
+    const completed = allEvaluations.filter((ev) => ev.scores.length > 0);
 
     // Group by event
     const completedByEvent = (() => {

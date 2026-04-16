@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { prokers, panitia, users } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { createProkerSchema } from "@/lib/validation";
+import { asc, eq } from "drizzle-orm";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -12,17 +14,19 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const periodId = searchParams.get("periodId") || undefined;
 
-  const prokers = await prisma.proker.findMany({
-    where: { periodId: periodId ?? undefined },
-    orderBy: { name: "asc" },
-    include: {
+  const result = await db.query.prokers.findMany({
+    where: periodId ? eq(prokers.periodId, periodId) : undefined,
+    orderBy: [asc(prokers.name)],
+    with: {
       division: true,
       period: true,
-      panitia: { include: { user: true } },
+      panitia: {
+        with: { user: true },
+      },
     },
   });
 
-  return NextResponse.json({ prokers });
+  return NextResponse.json({ prokers: result });
 }
 
 export async function POST(request: Request) {
@@ -36,7 +40,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const proker = await prisma.proker.create({ data: parsed.data });
+  const id = crypto.randomUUID();
+  await db.insert(prokers).values({
+    id,
+    name: parsed.data.name,
+    divisionId: parsed.data.divisionId,
+    periodId: parsed.data.periodId,
+    createdAt: new Date(),
+  });
+
+  const proker = await db.query.prokers.findFirst({
+    where: eq(prokers.id, id),
+    with: { division: true, period: true, panitia: { with: { user: true } } },
+  });
 
   return NextResponse.json({ proker }, { status: 201 });
 }

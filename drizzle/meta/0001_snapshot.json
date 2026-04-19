@@ -1,76 +1,68 @@
 {
-  "id": "00000000-0000-0000-0000-000000000000",
-  "prevId": "",
   "version": "5",
   "dialect": "mysql",
+  "id": "a92a9463-5800-4140-ae77-dbcd3700c2ae",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "auditlog": {
       "name": "auditlog",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "userId": {
-          "autoincrement": false,
           "name": "userId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "action": {
-          "autoincrement": false,
           "name": "action",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "success": {
-          "autoincrement": false,
           "name": "success",
-          "type": "tinyint(1)",
+          "type": "tinyint",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "ip": {
-          "autoincrement": false,
           "name": "ip",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "userAgent": {
-          "autoincrement": false,
           "name": "userAgent",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "metadata": {
-          "autoincrement": false,
           "name": "metadata",
           "type": "json",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "auditlog_id": {
-          "name": "auditlog_id",
-          "columns": [
-            "id"
-          ]
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {
@@ -90,8 +82,8 @@
         }
       },
       "foreignKeys": {
-        "AuditLog_userId_fkey": {
-          "name": "AuditLog_userId_fkey",
+        "auditlog_userId_user_id_fk": {
+          "name": "auditlog_userId_user_id_fk",
           "tableFrom": "auditlog",
           "tableTo": "user",
           "columnsFrom": [
@@ -104,6 +96,14 @@
           "onUpdate": "cascade"
         }
       },
+      "compositePrimaryKeys": {
+        "auditlog_id": {
+          "name": "auditlog_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
@@ -111,28 +111,30 @@
       "name": "division",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
-          "autoincrement": false,
           "name": "name",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
         "division_id": {
           "name": "division_id",
@@ -141,8 +143,6 @@
           ]
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
@@ -150,74 +150,53 @@
       "name": "evaluation",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "evaluatorId": {
-          "autoincrement": false,
           "name": "evaluatorId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "evaluateeId": {
-          "autoincrement": false,
           "name": "evaluateeId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "eventId": {
-          "autoincrement": false,
           "name": "eventId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "feedback": {
-          "autoincrement": false,
           "name": "feedback",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "evaluation_id": {
-          "name": "evaluation_id",
-          "columns": [
-            "id"
-          ]
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "Evaluation_evaluateeId_fkey": {
-          "name": "Evaluation_evaluateeId_fkey",
-          "tableFrom": "evaluation",
-          "tableTo": "user",
-          "columnsFrom": [
-            "evaluateeId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "cascade"
-        },
-        "Evaluation_evaluatorId_fkey": {
-          "name": "Evaluation_evaluatorId_fkey",
+        "evaluation_evaluatorId_user_id_fk": {
+          "name": "evaluation_evaluatorId_user_id_fk",
           "tableFrom": "evaluation",
           "tableTo": "user",
           "columnsFrom": [
@@ -229,8 +208,21 @@
           "onDelete": "restrict",
           "onUpdate": "cascade"
         },
-        "Evaluation_eventId_fkey": {
-          "name": "Evaluation_eventId_fkey",
+        "evaluation_evaluateeId_user_id_fk": {
+          "name": "evaluation_evaluateeId_user_id_fk",
+          "tableFrom": "evaluation",
+          "tableTo": "user",
+          "columnsFrom": [
+            "evaluateeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        },
+        "evaluation_eventId_evaluationevent_id_fk": {
+          "name": "evaluation_eventId_evaluationevent_id_fk",
           "tableFrom": "evaluation",
           "tableTo": "evaluationevent",
           "columnsFrom": [
@@ -241,6 +233,14 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "evaluation_id": {
+          "name": "evaluation_id",
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {
@@ -259,83 +259,75 @@
       "name": "evaluationevent",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
-          "autoincrement": false,
           "name": "name",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "type": {
-          "autoincrement": false,
           "name": "type",
           "type": "enum('PERIODIC','PROKER')",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "isOpen": {
-          "default": 1,
-          "autoincrement": false,
           "name": "isOpen",
-          "type": "tinyint(1)",
+          "type": "tinyint",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         },
         "startDate": {
-          "autoincrement": false,
           "name": "startDate",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "endDate": {
-          "autoincrement": false,
           "name": "endDate",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "periodId": {
-          "autoincrement": false,
           "name": "periodId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "prokerId": {
-          "autoincrement": false,
           "name": "prokerId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "evaluationevent_id": {
-          "name": "evaluationevent_id",
-          "columns": [
-            "id"
-          ]
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "EvaluationEvent_periodId_fkey": {
-          "name": "EvaluationEvent_periodId_fkey",
+        "evaluationevent_periodId_period_id_fk": {
+          "name": "evaluationevent_periodId_period_id_fk",
           "tableFrom": "evaluationevent",
           "tableTo": "period",
           "columnsFrom": [
@@ -347,8 +339,8 @@
           "onDelete": "restrict",
           "onUpdate": "cascade"
         },
-        "EvaluationEvent_prokerId_fkey": {
-          "name": "EvaluationEvent_prokerId_fkey",
+        "evaluationevent_prokerId_proker_id_fk": {
+          "name": "evaluationevent_prokerId_proker_id_fk",
           "tableFrom": "evaluationevent",
           "tableTo": "proker",
           "columnsFrom": [
@@ -361,6 +353,14 @@
           "onUpdate": "cascade"
         }
       },
+      "compositePrimaryKeys": {
+        "evaluationevent_id": {
+          "name": "evaluationevent_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
@@ -368,54 +368,46 @@
       "name": "evaluationscore",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "evaluationId": {
-          "autoincrement": false,
           "name": "evaluationId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "indicatorSnapshotId": {
-          "autoincrement": false,
           "name": "indicatorSnapshotId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "score": {
-          "autoincrement": false,
           "name": "score",
           "type": "int",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "evaluationscore_id": {
-          "name": "evaluationscore_id",
-          "columns": [
-            "id"
-          ]
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "EvaluationScore_evaluationId_fkey": {
-          "name": "EvaluationScore_evaluationId_fkey",
+        "evaluationscore_evaluationId_evaluation_id_fk": {
+          "name": "evaluationscore_evaluationId_evaluation_id_fk",
           "tableFrom": "evaluationscore",
           "tableTo": "evaluation",
           "columnsFrom": [
@@ -427,8 +419,8 @@
           "onDelete": "restrict",
           "onUpdate": "cascade"
         },
-        "EvaluationScore_indicatorSnapshotId_fkey": {
-          "name": "EvaluationScore_indicatorSnapshotId_fkey",
+        "evaluationscore_indicatorSnapshotId_indicatorsnapshot_id_fk": {
+          "name": "evaluationscore_indicatorSnapshotId_indicatorsnapshot_id_fk",
           "tableFrom": "evaluationscore",
           "tableTo": "indicatorsnapshot",
           "columnsFrom": [
@@ -441,6 +433,14 @@
           "onUpdate": "cascade"
         }
       },
+      "compositePrimaryKeys": {
+        "evaluationscore_id": {
+          "name": "evaluationscore_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
@@ -448,43 +448,45 @@
       "name": "indicator",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
-          "autoincrement": false,
           "name": "name",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "category": {
-          "autoincrement": false,
           "name": "category",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "isActive": {
-          "default": 1,
-          "autoincrement": false,
           "name": "isActive",
-          "type": "tinyint(1)",
+          "type": "tinyint",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
         "indicator_id": {
           "name": "indicator_id",
@@ -493,8 +495,6 @@
           ]
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
@@ -502,52 +502,31 @@
       "name": "indicatorsnapshot",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "indicatorId": {
-          "autoincrement": false,
           "name": "indicatorId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "eventId": {
-          "autoincrement": false,
           "name": "eventId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "indicatorsnapshot_id": {
-          "name": "indicatorsnapshot_id",
-          "columns": [
-            "id"
-          ]
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "IndicatorSnapshot_eventId_fkey": {
-          "name": "IndicatorSnapshot_eventId_fkey",
-          "tableFrom": "indicatorsnapshot",
-          "tableTo": "evaluationevent",
-          "columnsFrom": [
-            "eventId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "cascade"
-        },
-        "IndicatorSnapshot_indicatorId_fkey": {
-          "name": "IndicatorSnapshot_indicatorId_fkey",
+        "indicatorsnapshot_indicatorId_indicator_id_fk": {
+          "name": "indicatorsnapshot_indicatorId_indicator_id_fk",
           "tableFrom": "indicatorsnapshot",
           "tableTo": "indicator",
           "columnsFrom": [
@@ -558,6 +537,27 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "cascade"
+        },
+        "indicatorsnapshot_eventId_evaluationevent_id_fk": {
+          "name": "indicatorsnapshot_eventId_evaluationevent_id_fk",
+          "tableFrom": "indicatorsnapshot",
+          "tableTo": "evaluationevent",
+          "columnsFrom": [
+            "eventId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "indicatorsnapshot_id": {
+          "name": "indicatorsnapshot_id",
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -567,52 +567,31 @@
       "name": "panitia",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "userId": {
-          "autoincrement": false,
           "name": "userId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "prokerId": {
-          "autoincrement": false,
           "name": "prokerId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "panitia_id": {
-          "name": "panitia_id",
-          "columns": [
-            "id"
-          ]
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "Panitia_prokerId_fkey": {
-          "name": "Panitia_prokerId_fkey",
-          "tableFrom": "panitia",
-          "tableTo": "proker",
-          "columnsFrom": [
-            "prokerId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "cascade"
-        },
-        "Panitia_userId_fkey": {
-          "name": "Panitia_userId_fkey",
+        "panitia_userId_user_id_fk": {
+          "name": "panitia_userId_user_id_fk",
           "tableFrom": "panitia",
           "tableTo": "user",
           "columnsFrom": [
@@ -623,6 +602,27 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "cascade"
+        },
+        "panitia_prokerId_proker_id_fk": {
+          "name": "panitia_prokerId_proker_id_fk",
+          "tableFrom": "panitia",
+          "tableTo": "proker",
+          "columnsFrom": [
+            "prokerId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "panitia_id": {
+          "name": "panitia_id",
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -632,50 +632,52 @@
       "name": "period",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
-          "autoincrement": false,
           "name": "name",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "isActive": {
-          "default": 0,
-          "autoincrement": false,
           "name": "isActive",
-          "type": "tinyint(1)",
+          "type": "tinyint",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "startYear": {
-          "autoincrement": false,
           "name": "startYear",
           "type": "int",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "endYear": {
-          "autoincrement": false,
           "name": "endYear",
           "type": "int",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
         }
       },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {
         "period_id": {
           "name": "period_id",
@@ -684,8 +686,6 @@
           ]
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
@@ -693,40 +693,69 @@
       "name": "proker",
       "columns": {
         "id": {
-          "autoincrement": false,
           "name": "id",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
-          "autoincrement": false,
           "name": "name",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "divisionId": {
-          "autoincrement": false,
           "name": "divisionId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "periodId": {
-          "autoincrement": false,
           "name": "periodId",
           "type": "varchar(191)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
           "name": "createdAt",
           "type": "datetime(3)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "proker_divisionId_division_id_fk": {
+          "name": "proker_divisionId_division_id_fk",
+          "tableFrom": "proker",
+          "tableTo": "division",
+          "columnsFrom": [
+            "divisionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
+        },
+        "proker_periodId_period_id_fk": {
+          "name": "proker_periodId_period_id_fk",
+          "tableFrom": "proker",
+          "tableTo": "period",
+          "columnsFrom": [
+            "periodId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -737,24 +766,179 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "systemsettings": {
+      "name": "systemsettings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'default'"
+        },
+        "smtpHost": {
+          "name": "smtpHost",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smtpPort": {
+          "name": "smtpPort",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smtpUser": {
+          "name": "smtpUser",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smtpPass": {
+          "name": "smtpPass",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smtpSecure": {
+          "name": "smtpSecure",
+          "type": "tinyint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "smtpFromEmail": {
+          "name": "smtpFromEmail",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smtpFromName": {
+          "name": "smtpFromName",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "systemsettings_id": {
+          "name": "systemsettings_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "user": {
+      "name": "user",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nim": {
+          "name": "nim",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('ADMIN','BPI','KADIV','ANGGOTA')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "tinyint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "passwordHash": {
+          "name": "passwordHash",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "passwordUpdatedAt": {
+          "name": "passwordUpdatedAt",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "periodId": {
+          "name": "periodId",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "divisionId": {
+          "name": "divisionId",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP(3))"
+        }
+      },
       "indexes": {},
       "foreignKeys": {
-        "Proker_divisionId_fkey": {
-          "name": "Proker_divisionId_fkey",
-          "tableFrom": "proker",
-          "tableTo": "division",
-          "columnsFrom": [
-            "divisionId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "cascade"
-        },
-        "Proker_periodId_fkey": {
-          "name": "Proker_periodId_fkey",
-          "tableFrom": "proker",
+        "user_periodId_period_id_fk": {
+          "name": "user_periodId_period_id_fk",
+          "tableFrom": "user",
           "tableTo": "period",
           "columnsFrom": [
             "periodId"
@@ -764,188 +948,9 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "cascade"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "systemsettings": {
-      "name": "systemsettings",
-      "columns": {
-        "id": {
-          "default": "'default'",
-          "autoincrement": false,
-          "name": "id",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": true
         },
-        "smtpHost": {
-          "autoincrement": false,
-          "name": "smtpHost",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smtpPort": {
-          "autoincrement": false,
-          "name": "smtpPort",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smtpUser": {
-          "autoincrement": false,
-          "name": "smtpUser",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smtpPass": {
-          "autoincrement": false,
-          "name": "smtpPass",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smtpSecure": {
-          "default": 0,
-          "autoincrement": false,
-          "name": "smtpSecure",
-          "type": "tinyint(1)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "smtpFromEmail": {
-          "autoincrement": false,
-          "name": "smtpFromEmail",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smtpFromName": {
-          "autoincrement": false,
-          "name": "smtpFromName",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updatedAt": {
-          "autoincrement": false,
-          "name": "updatedAt",
-          "type": "datetime(3)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "systemsettings_id": {
-          "name": "systemsettings_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "user": {
-      "name": "user",
-      "columns": {
-        "id": {
-          "autoincrement": false,
-          "name": "id",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nim": {
-          "autoincrement": false,
-          "name": "nim",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "autoincrement": false,
-          "name": "name",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "email": {
-          "autoincrement": false,
-          "name": "email",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "role": {
-          "autoincrement": false,
-          "name": "role",
-          "type": "enum('ADMIN','BPI','KADIV','ANGGOTA')",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "isActive": {
-          "default": 1,
-          "autoincrement": false,
-          "name": "isActive",
-          "type": "tinyint(1)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "passwordHash": {
-          "autoincrement": false,
-          "name": "passwordHash",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "passwordUpdatedAt": {
-          "autoincrement": false,
-          "name": "passwordUpdatedAt",
-          "type": "datetime(3)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "periodId": {
-          "autoincrement": false,
-          "name": "periodId",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "divisionId": {
-          "autoincrement": false,
-          "name": "divisionId",
-          "type": "varchar(191)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdAt": {
-          "default": "(CURRENT_TIMESTAMP(3))",
-          "autoincrement": false,
-          "name": "createdAt",
-          "type": "datetime(3)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "compositePrimaryKeys": {
-        "user_id": {
-          "name": "user_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "User_divisionId_fkey": {
-          "name": "User_divisionId_fkey",
+        "user_divisionId_division_id_fk": {
+          "name": "user_divisionId_division_id_fk",
           "tableFrom": "user",
           "tableTo": "division",
           "columnsFrom": [
@@ -956,19 +961,14 @@
           ],
           "onDelete": "set null",
           "onUpdate": "cascade"
-        },
-        "User_periodId_fkey": {
-          "name": "User_periodId_fkey",
-          "tableFrom": "user",
-          "tableTo": "period",
-          "columnsFrom": [
-            "periodId"
-          ],
-          "columnsTo": [
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_id": {
+          "name": "user_id",
+          "columns": [
             "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "cascade"
+          ]
         }
       },
       "uniqueConstraints": {
@@ -989,71 +989,7 @@
     "columns": {}
   },
   "internal": {
-    "tables": {
-      "auditlog": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "division": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "evaluation": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "evaluationevent": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "evaluationscore": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "indicator": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "period": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "proker": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      },
-      "user": {
-        "columns": {
-          "createdAt": {
-            "isDefaultAnExpression": true
-          }
-        }
-      }
-    },
+    "tables": {},
     "indexes": {}
   }
 }

@@ -1,20 +1,20 @@
 import {
-    mysqlTable,
+    pgTable,
+    pgEnum,
     varchar,
     boolean,
-    int,
-    datetime,
+    integer,
+    timestamp,
     text,
-    json,
+    jsonb,
     unique,
     index,
-    mysqlEnum,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export const roleEnum = mysqlEnum("role", [
+export const roleEnum = pgEnum("user_role", [
     "ADMIN",
     "BPI",
     "KADIV",
@@ -22,80 +22,80 @@ export const roleEnum = mysqlEnum("role", [
     "KASUBDIV",
 ]);
 
-export const eventTypeEnum = mysqlEnum("type", ["PERIODIC", "PROKER"]);
+export const eventTypeEnum = pgEnum("evaluation_event_type", ["PERIODIC", "PROKER"]);
 
 // ─── Tables ───────────────────────────────────────────────────────────────────
 
-export const periods = mysqlTable("period", {
+export const periods = pgTable("period", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     isActive: boolean("isActive").notNull().default(false),
-    startYear: int("startYear").notNull(),
-    endYear: int("endYear").notNull(),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    startYear: integer("startYear").notNull(),
+    endYear: integer("endYear").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const users = mysqlTable("user", {
+export const users = pgTable("user", {
     id: varchar("id", { length: 36 }).primaryKey(),
     nim: varchar("nim", { length: 255 }).notNull().unique(),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }),
-    role: roleEnum.notNull(),
+    role: roleEnum("role").notNull(),
     isActive: boolean("isActive").notNull().default(true),
     passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
-    passwordUpdatedAt: datetime("passwordUpdatedAt"),
+    passwordUpdatedAt: timestamp("passwordUpdatedAt", { mode: "date", withTimezone: true }),
     periodId: varchar("periodId", { length: 36 }).notNull(),
     divisionId: varchar("divisionId", { length: 36 }),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const divisions = mysqlTable("division", {
+export const divisions = pgTable("division", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const prokers = mysqlTable("proker", {
+export const prokers = pgTable("proker", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     divisionId: varchar("divisionId", { length: 36 }).notNull(),
     periodId: varchar("periodId", { length: 36 }).notNull(),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const panitia = mysqlTable("panitia", {
+export const panitia = pgTable("panitia", {
     id: varchar("id", { length: 36 }).primaryKey(),
     userId: varchar("userId", { length: 36 }).notNull(),
     prokerId: varchar("prokerId", { length: 36 }).notNull(),
 });
 
-export const evaluationEvents = mysqlTable("evaluationevent", {
+export const evaluationEvents = pgTable("evaluationevent", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    type: eventTypeEnum.notNull(),
+    type: eventTypeEnum("type").notNull(),
     isOpen: boolean("isOpen").notNull().default(true),
-    startDate: datetime("startDate").notNull(),
-    endDate: datetime("endDate").notNull(),
+    startDate: timestamp("startDate", { mode: "date", withTimezone: true }).notNull(),
+    endDate: timestamp("endDate", { mode: "date", withTimezone: true }).notNull(),
     periodId: varchar("periodId", { length: 36 }).notNull(),
     prokerId: varchar("prokerId", { length: 36 }),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const indicators = mysqlTable("indicator", {
+export const indicators = pgTable("indicator", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     category: varchar("category", { length: 255 }).notNull(),
     isActive: boolean("isActive").notNull().default(true),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const indicatorSnapshots = mysqlTable("indicatorsnapshot", {
+export const indicatorSnapshots = pgTable("indicatorsnapshot", {
     id: varchar("id", { length: 36 }).primaryKey(),
     indicatorId: varchar("indicatorId", { length: 36 }).notNull(),
     eventId: varchar("eventId", { length: 36 }).notNull(),
 });
 
-export const evaluations = mysqlTable(
+export const evaluations = pgTable(
     "evaluation",
     {
         id: varchar("id", { length: 36 }).primaryKey(),
@@ -103,22 +103,22 @@ export const evaluations = mysqlTable(
         evaluateeId: varchar("evaluateeId", { length: 36 }).notNull(),
         eventId: varchar("eventId", { length: 36 }).notNull(),
         feedback: text("feedback"),
-        createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+        createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
     },
     (table) => ({
         uniqueEval: unique().on(table.evaluatorId, table.evaluateeId, table.eventId),
     })
 );
 
-export const evaluationScores = mysqlTable("evaluationscore", {
+export const evaluationScores = pgTable("evaluationscore", {
     id: varchar("id", { length: 36 }).primaryKey(),
     evaluationId: varchar("evaluationId", { length: 36 }).notNull(),
     indicatorSnapshotId: varchar("indicatorSnapshotId", { length: 36 }).notNull(),
-    score: int("score").notNull(),
-    createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+    score: integer("score").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
-export const auditLogs = mysqlTable(
+export const auditLogs = pgTable(
     "auditlog",
     {
         id: varchar("id", { length: 36 }).primaryKey(),
@@ -127,8 +127,8 @@ export const auditLogs = mysqlTable(
         success: boolean("success").notNull(),
         ip: varchar("ip", { length: 255 }),
         userAgent: text("userAgent"),
-        metadata: json("metadata"),
-        createdAt: datetime("createdAt").notNull().default(new Date("1970-01-01")),
+        metadata: jsonb("metadata"),
+        createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
     },
     (table) => ({
         actionIdx: index("AuditLog_action_idx").on(table.action),

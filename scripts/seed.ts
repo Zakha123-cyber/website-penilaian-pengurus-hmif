@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from "dotenv";
+dotenv.config({ override: true });
 import { db } from "../lib/db";
 import { indicators, prokers, periods, divisions, users, evaluationEvents, indicatorSnapshots, evaluations, evaluationScores } from "../lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";

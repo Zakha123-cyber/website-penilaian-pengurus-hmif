@@ -1,19 +1,26 @@
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "@/lib/schema";
 
 const globalForDb = globalThis as unknown as {
-    pool: mysql.Pool | undefined;
+    conn: ReturnType<typeof postgres> | undefined;
 };
 
-const pool =
-    globalForDb.pool ??
-    mysql.createPool({
-        uri: process.env.DATABASE_URL as string,
+const connectionString = process.env.DATABASE_URL_RUNTIME ?? process.env.DATABASE_URL;
+if (!connectionString) {
+    throw new Error("DATABASE_URL_RUNTIME or DATABASE_URL is not set");
+}
+
+/** `prepare: false` keeps Supabase transaction pooler (PgBouncer) happy. */
+const client =
+    globalForDb.conn ??
+    postgres(connectionString, {
+        max: 10,
+        prepare: false,
     });
 
 if (process.env.NODE_ENV !== "production") {
-    globalForDb.pool = pool;
+    globalForDb.conn = client;
 }
 
-export const db = drizzle(pool, { schema, mode: "default" });
+export const db = drizzle(client, { schema });

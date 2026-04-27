@@ -1,26 +1,64 @@
 import dotenv from "dotenv";
 dotenv.config({ override: true });
 import { db } from "../lib/db";
-import { indicators, prokers, periods, divisions, users, evaluationEvents, indicatorSnapshots, evaluations, evaluationScores } from "../lib/schema";
+import { indicators, periods, divisions, subdivisions, users } from "../lib/schema";
 import { eq, and, sql, asc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-const hardIndicators = [
-  "Perencanaan Program",
-  "Eksekusi Tugas",
-  "Manajemen Waktu",
-  "Dokumentasi",
-  "Penggunaan Tools Digital",
-  "Analisis Data",
-  "Penyusunan Laporan",
-  "Kepatuhan Prosedur",
-  "Problem Solving Teknis",
-  "Kualitas Deliverable",
-  "Kolaborasi Teknis",
-  "Kerapihan Administrasi",
-];
+type Role = "BPI" | "KADIV" | "KASUBDIV" | "ANGGOTA";
 
-const softIndicators = ["Komunikasi", "Kepemimpinan", "Kerja Tim", "Inisiatif", "Adaptabilitas", "Tanggung Jawab", "Integritas"];
+// Indikator per pasangan hierarki (evaluatorRole → evaluateeRole)
+const INDICATORS: { name: string; evaluatorRole: Role; evaluateeRole: Role }[] = [
+  // BPI → KADIV
+  { name: "Kemampuan memimpin divisi", evaluatorRole: "BPI", evaluateeRole: "KADIV" },
+  { name: "Koordinasi dengan BPI", evaluatorRole: "BPI", evaluateeRole: "KADIV" },
+  { name: "Pelaporan progres divisi", evaluatorRole: "BPI", evaluateeRole: "KADIV" },
+
+  // BPI → KASUBDIV
+  { name: "Pengelolaan subdivisi", evaluatorRole: "BPI", evaluateeRole: "KASUBDIV" },
+  { name: "Responsivitas terhadap arahan", evaluatorRole: "BPI", evaluateeRole: "KASUBDIV" },
+
+  // KADIV → BPI
+  { name: "Kejelasan arahan dari BPI", evaluatorRole: "KADIV", evaluateeRole: "BPI" },
+  { name: "Dukungan BPI terhadap divisi", evaluatorRole: "KADIV", evaluateeRole: "BPI" },
+  { name: "Keterbukaan BPI dalam komunikasi", evaluatorRole: "KADIV", evaluateeRole: "BPI" },
+
+  // KADIV → KASUBDIV
+  { name: "Koordinasi dengan KADIV", evaluatorRole: "KADIV", evaluateeRole: "KASUBDIV" },
+  { name: "Pengelolaan anggota subdivisi", evaluatorRole: "KADIV", evaluateeRole: "KASUBDIV" },
+
+  // KADIV → ANGGOTA
+  { name: "Eksekusi tugas", evaluatorRole: "KADIV", evaluateeRole: "ANGGOTA" },
+  { name: "Kedisiplinan", evaluatorRole: "KADIV", evaluateeRole: "ANGGOTA" },
+  { name: "Kualitas deliverable", evaluatorRole: "KADIV", evaluateeRole: "ANGGOTA" },
+  { name: "Inisiatif", evaluatorRole: "KADIV", evaluateeRole: "ANGGOTA" },
+
+  // KASUBDIV → KADIV
+  { name: "Pengayoman KADIV terhadap subdivisi", evaluatorRole: "KASUBDIV", evaluateeRole: "KADIV" },
+  { name: "Kejelasan instruksi KADIV", evaluatorRole: "KASUBDIV", evaluateeRole: "KADIV" },
+
+  // KASUBDIV → ANGGOTA
+  { name: "Keterlibatan dalam tugas subdivisi", evaluatorRole: "KASUBDIV", evaluateeRole: "ANGGOTA" },
+  { name: "Kerja sama dalam subdivisi", evaluatorRole: "KASUBDIV", evaluateeRole: "ANGGOTA" },
+
+  // ANGGOTA → BPI
+  { name: "Transparansi BPI", evaluatorRole: "ANGGOTA", evaluateeRole: "BPI" },
+  { name: "Keterlibatan BPI dalam kegiatan", evaluatorRole: "ANGGOTA", evaluateeRole: "BPI" },
+
+  // ANGGOTA → KADIV
+  { name: "Pengayoman KADIV terhadap anggota", evaluatorRole: "ANGGOTA", evaluateeRole: "KADIV" },
+  { name: "Kemampuan KADIV mengorganisir divisi", evaluatorRole: "ANGGOTA", evaluateeRole: "KADIV" },
+  { name: "Komunikasi KADIV dengan anggota", evaluatorRole: "ANGGOTA", evaluateeRole: "KADIV" },
+
+  // ANGGOTA → KASUBDIV
+  { name: "Kepemimpinan KASUBDIV", evaluatorRole: "ANGGOTA", evaluateeRole: "KASUBDIV" },
+  { name: "Arahan KASUBDIV kepada anggota", evaluatorRole: "ANGGOTA", evaluateeRole: "KASUBDIV" },
+
+  // ANGGOTA → ANGGOTA
+  { name: "Kerja sama tim", evaluatorRole: "ANGGOTA", evaluateeRole: "ANGGOTA" },
+  { name: "Tanggung jawab tugas", evaluatorRole: "ANGGOTA", evaluateeRole: "ANGGOTA" },
+  { name: "Kontribusi dalam kegiatan", evaluatorRole: "ANGGOTA", evaluateeRole: "ANGGOTA" },
+];
 
 const DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD ?? "JayalahHimpunanku123!";
 const DEFAULT_PERIOD = {
@@ -38,19 +76,49 @@ const DEFAULT_USERS = [
 
 async function seedIndicators() {
   console.log("Seeding indicators...");
-  for (const name of hardIndicators) {
-    const existing = await db.query.indicators.findFirst({ where: eq(indicators.name, name) });
+  for (const ind of INDICATORS) {
+    const existing = await db.query.indicators.findFirst({
+      where: eq(indicators.name, ind.name),
+    });
     if (!existing) {
-      await db.insert(indicators).values({ id: crypto.randomUUID(), name, category: "hardskill" });
+      await db.insert(indicators).values({
+        id: crypto.randomUUID(),
+        name: ind.name,
+        evaluatorRole: ind.evaluatorRole,
+        evaluateeRole: ind.evaluateeRole,
+      });
     }
   }
+  console.log(`Seeded ${INDICATORS.length} indicators.`);
+}
 
-  for (const name of softIndicators) {
-    const existing = await db.query.indicators.findFirst({ where: eq(indicators.name, name) });
+const DEFAULT_SUBDIVISIONS: { name: string; division: string }[] = [
+  { name: "HUBLU",  division: "Humas"    },
+  { name: "KONTEN", division: "Humas"    },
+  { name: "MEDIA",  division: "Mediatek" },
+  { name: "TEKNO",  division: "Mediatek" },
+];
+
+async function seedSubdivisions(divisionMap: Record<string, string>) {
+  console.log("Seeding subdivisions...");
+  for (const sub of DEFAULT_SUBDIVISIONS) {
+    const divisionId = divisionMap[sub.division];
+    if (!divisionId) {
+      console.warn(`Division "${sub.division}" not found, skipping subdivision "${sub.name}"`);
+      continue;
+    }
+    const existing = await db.query.subdivisions.findFirst({
+      where: eq(subdivisions.name, sub.name),
+    });
     if (!existing) {
-      await db.insert(indicators).values({ id: crypto.randomUUID(), name, category: "softskill" });
+      await db.insert(subdivisions).values({
+        id: crypto.randomUUID(),
+        name: sub.name,
+        divisionId,
+      });
     }
   }
+  console.log(`Seeded ${DEFAULT_SUBDIVISIONS.length} subdivisions.`);
 }
 
 // async function seedProker(periodId: string, divisionMap: Record<string, string>) {
@@ -262,6 +330,7 @@ async function seedUsers(periodId: string, divisionMap: Record<string, string>) 
 
 async function main() {
   const { periodId, divisionMap } = await seedPeriodAndDivisions();
+  await seedSubdivisions(divisionMap);
   await seedIndicators();
   const userMap = await seedUsers(periodId, divisionMap);
   await seedUserPasswords();

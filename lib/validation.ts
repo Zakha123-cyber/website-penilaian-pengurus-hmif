@@ -41,6 +41,12 @@ export const createUserSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" || v === undefined ? null : v)),
+  subdivisionId: z
+    .string()
+    .min(1)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" || v === undefined ? null : v)),
   password: z.string().min(6),
   isActive: z.coerce.boolean().optional().default(true),
 });
@@ -57,6 +63,12 @@ export const updateUserSchema = z.object({
   role: roleEnum,
   periodId: z.string().min(1),
   divisionId: z
+    .string()
+    .min(1)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" || v === undefined ? null : v)),
+  subdivisionId: z
     .string()
     .min(1)
     .optional()
@@ -87,15 +99,19 @@ export const addPanitiaSchema = z.object({
   userId: z.string().min(1),
 });
 
+const hierarchyRoleEnum = z.enum(["BPI", "KADIV", "KASUBDIV", "ANGGOTA"]);
+
 export const createIndicatorSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
-  category: z.enum(["hard", "soft", "other"]).optional().default("hard"),
+  evaluatorRole: hierarchyRoleEnum,
+  evaluateeRole: hierarchyRoleEnum,
   isActive: z.coerce.boolean().optional().default(true),
 });
 
 export const updateIndicatorSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
-  category: z.enum(["hard", "soft", "other"]).optional().default("hard"),
+  evaluatorRole: hierarchyRoleEnum,
+  evaluateeRole: hierarchyRoleEnum,
   isActive: z.coerce.boolean().optional().default(true),
 });
 

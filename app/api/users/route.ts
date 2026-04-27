@@ -17,6 +17,7 @@ export async function GET() {
     with: {
       period: true,
       division: true,
+      subdivision: true,
     },
   });
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { nim, name, email, role, periodId, divisionId, password, isActive } = parsed.data;
+  const { nim, name, email, role, periodId, divisionId, subdivisionId, password, isActive } = parsed.data;
   const passwordHash = await bcrypt.hash(password, 10);
 
   const id = crypto.randomUUID();
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     role,
     periodId,
     divisionId: divisionId ?? null,
+    subdivisionId: subdivisionId ?? null,
     passwordHash,
     isActive: isActive ?? true,
     createdAt: new Date(),
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, id),
-    with: { period: true, division: true },
+    with: { period: true, division: true, subdivision: true },
   });
 
   return NextResponse.json({ user }, { status: 201 });

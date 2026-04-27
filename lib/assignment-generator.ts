@@ -1,12 +1,10 @@
 import { db } from "@/lib/db";
 import {
   users,
-  evaluationEvents,
   evaluations,
-  indicatorSnapshots,
   panitia,
 } from "@/lib/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 type EventRow = {
   id: string;
@@ -26,42 +24,51 @@ export async function generateAssignmentsForEvent(event: EventRow) {
 
 async function generatePeriodicAssignments(eventId: string, periodId: string) {
   const allUsers = await db
-    .select({ id: users.id, role: users.role, divisionId: users.divisionId })
+    .select({ id: users.id, role: users.role, divisionId: users.divisionId, subdivisionId: users.subdivisionId })
     .from(users)
     .where(and(eq(users.periodId, periodId), eq(users.isActive, true)));
 
   const bpi = allUsers.filter((u) => u.role === "BPI");
   const kadiv = allUsers.filter((u) => u.role === "KADIV");
+  const kasubdiv = allUsers.filter((u) => u.role === "KASUBDIV");
   const anggota = allUsers.filter((u) => u.role === "ANGGOTA");
 
   const pairs: { id: string; evaluatorId: string; evaluateeId: string; eventId: string; createdAt: Date }[] = [];
 
+  const addPair = (evaluatorId: string, evaluateeId: string) => {
+    if (evaluatorId !== evaluateeId)
+      pairs.push({ id: crypto.randomUUID(), evaluatorId, evaluateeId: evaluateeId, eventId, createdAt: new Date() });
+  };
+
   for (const ev of allUsers) {
     if (ev.role === "BPI") {
-      for (const target of allUsers) {
-        if (target.id !== ev.id)
-          pairs.push({ id: crypto.randomUUID(), evaluatorId: ev.id, evaluateeId: target.id, eventId, createdAt: new Date() });
-      }
+      // BPI menilai semua KADIV dan KASUBDIV
+      for (const target of [...kadiv, ...kasubdiv]) addPair(ev.id, target.id);
+
     } else if (ev.role === "KADIV") {
-      const sameDivAnggota = anggota.filter((a) => a.divisionId && a.divisionId === ev.divisionId);
-      for (const target of [...bpi, ...sameDivAnggota]) {
-        if (target.id !== ev.id)
-          pairs.push({ id: crypto.randomUUID(), evaluatorId: ev.id, evaluateeId: target.id, eventId, createdAt: new Date() });
-      }
+      // KADIV menilai BPI + ANGGOTA sedivisi + KASUBDIV sedivisi
+      const sameDivAnggota = anggota.filter((a) => a.divisionId === ev.divisionId);
+      const sameDivKasubdiv = kasubdiv.filter((k) => k.divisionId === ev.divisionId);
+      for (const target of [...bpi, ...sameDivKasubdiv, ...sameDivAnggota]) addPair(ev.id, target.id);
+
+    } else if (ev.role === "KASUBDIV") {
+      // KASUBDIV menilai KADIV sedivisi + ANGGOTA sesubdivisi
+      const sameDivKadiv = kadiv.filter((k) => k.divisionId === ev.divisionId);
+      const sameSubdivAnggota = anggota.filter((a) => a.subdivisionId && a.subdivisionId === ev.subdivisionId);
+      for (const target of [...sameDivKadiv, ...sameSubdivAnggota]) addPair(ev.id, target.id);
+
     } else if (ev.role === "ANGGOTA") {
-      const sameDivAnggota = anggota.filter((a) => a.divisionId && a.divisionId === ev.divisionId && a.id !== ev.id);
-      const sameDivKadiv = kadiv.filter((k) => k.divisionId && k.divisionId === ev.divisionId);
-      for (const target of [...bpi, ...sameDivKadiv, ...sameDivAnggota]) {
-        if (target.id !== ev.id)
-          pairs.push({ id: crypto.randomUUID(), evaluatorId: ev.id, evaluateeId: target.id, eventId, createdAt: new Date() });
-      }
+      // ANGGOTA menilai BPI + KADIV sedivisi + KASUBDIV sedivisi + sesama ANGGOTA sedivisi
+      const sameDivKadiv = kadiv.filter((k) => k.divisionId === ev.divisionId);
+      const sameDivKasubdiv = kasubdiv.filter((k) => k.divisionId === ev.divisionId);
+      const sameDivAnggota = anggota.filter((a) => a.divisionId === ev.divisionId && a.id !== ev.id);
+      for (const target of [...bpi, ...sameDivKadiv, ...sameDivKasubdiv, ...sameDivAnggota]) addPair(ev.id, target.id);
     }
   }
 
   if (pairs.length > 0) {
-    // Insert in batches of 100 to avoid large queries
     for (let i = 0; i < pairs.length; i += 100) {
-      await db.insert(evaluations).ignore().values(pairs.slice(i, i + 100));
+      await db.insert(evaluations).values(pairs.slice(i, i + 100)).onConflictDoNothing();
     }
   }
 
@@ -78,7 +85,7 @@ async function generateProkerAssignments(eventId: string, prokerId: string, _per
 
   console.log(`[Assignment Generator] PROKER event ${eventId}: Found ${panitiaRows.length} total panitia for proker ${prokerId}`);
 
-  const activeUsers = panitiaRows.filter((p) => p.User.isActive).map((p) => p.User);
+  const activeUsers = panitiaRows.filter((p) => p.user.isActive).map((p) => p.user);
 
   console.log(`[Assignment Generator] PROKER event ${eventId}: ${activeUsers.length} active users after filtering`);
   if (activeUsers.length > 0) {
@@ -103,7 +110,7 @@ async function generateProkerAssignments(eventId: string, prokerId: string, _per
 
   if (pairs.length > 0) {
     for (let i = 0; i < pairs.length; i += 100) {
-      await db.insert(evaluations).ignore().values(pairs.slice(i, i + 100));
+      await db.insert(evaluations).values(pairs.slice(i, i + 100)).onConflictDoNothing();
     }
   }
 

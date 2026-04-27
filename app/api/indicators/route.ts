@@ -14,7 +14,7 @@ export async function GET() {
   const result = await db
     .select()
     .from(indicators)
-    .orderBy(asc(indicators.category), asc(indicators.name));
+    .orderBy(asc(indicators.name));
 
   return NextResponse.json({ indicators: result });
 }
@@ -34,7 +34,8 @@ export async function POST(request: Request) {
   await db.insert(indicators).values({
     id,
     name: parsed.data.name,
-    category: parsed.data.category,
+    evaluatorRole: parsed.data.evaluatorRole,
+    evaluateeRole: parsed.data.evaluateeRole,
     isActive: parsed.data.isActive ?? true,
     createdAt: new Date(),
   });

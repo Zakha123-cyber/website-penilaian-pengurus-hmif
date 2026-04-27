@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { evaluations, evaluationScores, evaluationEvents } from "@/lib/schema";
+import { evaluations, evaluationScores, evaluationEvents, users } from "@/lib/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { submitEvaluationSchema } from "@/lib/validation";
@@ -54,12 +54,13 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
     const scoredActionIds = new Set(scoredRowsAction.map((r) => r.evaluationId));
     const pendingActionIds = allEvalActionIds.filter((id) => !scoredActionIds.has(id));
 
-    // Step 3: fetch pending evaluations with event indicators (max 2 levels deep)
+    // Step 3: fetch pending evaluations with event indicators + evaluatee role
     const allPendingEvaluations = pendingActionIds.length > 0
       ? await db.query.evaluations.findMany({
         where: inArray(evaluations.id, pendingActionIds),
         with: {
-          event: { with: { indicators: true } },
+          evaluatee: { columns: { role: true } },
+          event: { with: { indicators: { with: { indicator: { columns: { evaluatorRole: true, evaluateeRole: true } } } } } },
         },
       })
       : [];
@@ -95,9 +96,23 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
       scores: Array<{ indicatorSnapshotId: string; score: number }>;
     }> = [];
 
+    // Fetch evaluator role once for the action
+    const evaluatorUser = await db.query.users.findFirst({
+      where: eq(users.id, session.userId),
+      columns: { role: true },
+    });
+    const evaluatorRoleForAction = evaluatorUser?.role ?? "ANGGOTA";
+
     for (const evaluation of allPendingEvaluations) {
       const feedback = String(formData.get(`feedback-${evaluation.id}`) ?? "");
-      const scores = evaluation.event.indicators.map((snap: any) => ({
+      const evaluateeRole = (evaluation as any).evaluatee?.role ?? "ANGGOTA";
+      // Only score indicators matching this evaluator→evaluatee role pair
+      const relevantSnaps = (evaluation.event.indicators as any[]).filter(
+        (snap) =>
+          snap.indicator?.evaluatorRole === evaluatorRoleForAction &&
+          snap.indicator?.evaluateeRole === evaluateeRole
+      );
+      const scores = relevantSnaps.map((snap: any) => ({
         indicatorSnapshotId: snap.id,
         score: Number(formData.get(`score-${evaluation.id}-${snap.id}`)),
       }));
@@ -144,14 +159,14 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
 
   // ── Page Data ──────────────────────────────────────────────────────────────
 
-  // Step 1: fetch event data + all evaluation IDs in parallel
-  const [eventData, allEvalRows] = await Promise.all([
+  // Step 1: fetch event data + all evaluation IDs + evaluator role in parallel
+  const [eventData, allEvalRows, evaluatorData] = await Promise.all([
     db.query.evaluationEvents.findFirst({
       where: eq(evaluationEvents.id, eventId),
       with: {
         period: { columns: { name: true } },
         proker: { columns: { name: true } },
-        indicators: { with: { indicator: { columns: { name: true } } } },
+        indicators: { with: { indicator: { columns: { name: true, evaluatorRole: true, evaluateeRole: true } } } },
       },
     }),
     db
@@ -161,6 +176,10 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
         eq(evaluations.evaluatorId, session.userId),
         eq(evaluations.eventId, eventId),
       )),
+    db.query.users.findFirst({
+      where: eq(users.id, session.userId),
+      columns: { role: true },
+    }),
   ]);
 
   const allEvalIds = allEvalRows.map((r) => r.id);
@@ -185,12 +204,12 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
         where: inArray(evaluations.id, pendingIdsPage),
         with: {
           evaluatee: {
-            columns: { name: true, id: true },
+            columns: { name: true, id: true, role: true },
             with: { division: { columns: { name: true } } },
           },
           event: {
             columns: { isOpen: true },
-            with: { indicators: { columns: { id: true } } },
+            with: { indicators: { columns: { id: true }, with: { indicator: { columns: { evaluatorRole: true, evaluateeRole: true } } } } },
           },
         },
         orderBy: [desc(evaluations.createdAt)],
@@ -225,26 +244,36 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
   const totalTasks = pendingEvals.length + completedEvals.length;
   const progressPercent = totalTasks > 0 ? Math.round((completedEvals.length / totalTasks) * 100) : 0;
 
-  // Build indicators map from eventData (already fetched — no re-fetch needed)
+  // Build indicators map from eventData (name lookup)
   const indicatorsMap = new Map(
     (eventData.indicators ?? []).map((snap: any) => [snap.id, snap.indicator?.name ?? snap.id])
   );
 
-  // Serialize pending data for client component
-  const pendingForClient = pendingEvals.map((ev: any) => ({
-    id: ev.id,
-    evaluatee: {
-      name: ev.evaluatee.name,
-      division: ev.evaluatee.division ? { name: ev.evaluatee.division.name } : null,
-    },
-    event: {
-      isOpen: ev.event.isOpen,
-      indicators: (ev.event.indicators ?? []).map((snap: any) => ({
-        id: snap.id,
-        indicator: { name: indicatorsMap.get(snap.id) ?? snap.id },
-      })),
-    },
-  }));
+  const evaluatorRole = evaluatorData?.role ?? "ANGGOTA";
+
+  // Serialize pending data for client component — filter indicators by role pair
+  const pendingForClient = pendingEvals.map((ev: any) => {
+    const evaluateeRole = ev.evaluatee.role;
+    const filteredIndicators = (ev.event.indicators ?? []).filter(
+      (snap: any) =>
+        snap.indicator?.evaluatorRole === evaluatorRole &&
+        snap.indicator?.evaluateeRole === evaluateeRole
+    );
+    return {
+      id: ev.id,
+      evaluatee: {
+        name: ev.evaluatee.name,
+        division: ev.evaluatee.division ? { name: ev.evaluatee.division.name } : null,
+      },
+      event: {
+        isOpen: ev.event.isOpen,
+        indicators: filteredIndicators.map((snap: any) => ({
+          id: snap.id,
+          indicator: { name: indicatorsMap.get(snap.id) ?? snap.id },
+        })),
+      },
+    };
+  });
 
   const formatDate = (d: Date) =>
     new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(d);

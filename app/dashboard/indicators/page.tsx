@@ -5,13 +5,13 @@ import { revalidatePath } from "next/cache";
 import { Pencil, Trash2 } from "lucide-react";
 
 import { ConfirmForm } from "@/components/confirm-form";
+import { IndicatorForm } from "@/components/indicator-form";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SiteHeader } from "@/components/site-header";
 import { SuccessAlert } from "@/components/success-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
@@ -21,10 +21,26 @@ import { indicators as indicatorsTable, periods, users, indicatorSnapshots } fro
 import { eq, desc, asc, sql } from "drizzle-orm";
 import { createIndicatorSchema, updateIndicatorSchema } from "@/lib/validation";
 
-const categories = [
-  { value: "hard", label: "Hard skill" },
-  { value: "soft", label: "Soft skill" },
-  { value: "other", label: "Lainnya" },
+const ROLE_LABELS: Record<string, string> = {
+  BPI:      "BPI",
+  KADIV:    "Kepala Divisi",
+  KASUBDIV: "Kepala Sub Divisi",
+  ANGGOTA:  "Anggota",
+};
+
+// 11 kombinasi valid sesuai hierarki assignment generator
+const HIERARCHY_PAIRS = [
+  { evaluatorRole: "BPI",      evaluateeRole: "KADIV"    },
+  { evaluatorRole: "BPI",      evaluateeRole: "KASUBDIV" },
+  { evaluatorRole: "KADIV",    evaluateeRole: "BPI"      },
+  { evaluatorRole: "KADIV",    evaluateeRole: "KASUBDIV" },
+  { evaluatorRole: "KADIV",    evaluateeRole: "ANGGOTA"  },
+  { evaluatorRole: "KASUBDIV", evaluateeRole: "KADIV"    },
+  { evaluatorRole: "KASUBDIV", evaluateeRole: "ANGGOTA"  },
+  { evaluatorRole: "ANGGOTA",  evaluateeRole: "BPI"      },
+  { evaluatorRole: "ANGGOTA",  evaluateeRole: "KADIV"    },
+  { evaluatorRole: "ANGGOTA",  evaluateeRole: "KASUBDIV" },
+  { evaluatorRole: "ANGGOTA",  evaluateeRole: "ANGGOTA"  },
 ];
 
 type IndicatorsPageProps = { searchParams: Promise<Record<string, string | undefined>> };
@@ -43,7 +59,8 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
 
     const raw = {
       name: String(formData.get("name") ?? ""),
-      category: String(formData.get("category") ?? "hard"),
+      evaluatorRole: String(formData.get("evaluatorRole") ?? ""),
+      evaluateeRole: String(formData.get("evaluateeRole") ?? ""),
       isActive: formData.get("isActive") === "on",
     };
     const parsed = createIndicatorSchema.safeParse(raw);
@@ -63,7 +80,8 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
     const id = String(formData.get("id") ?? "");
     const raw = {
       name: String(formData.get("name") ?? ""),
-      category: String(formData.get("category") ?? "hard"),
+      evaluatorRole: String(formData.get("evaluatorRole") ?? ""),
+      evaluateeRole: String(formData.get("evaluateeRole") ?? ""),
       isActive: formData.get("isActive") === "on",
     };
     const parsed = updateIndicatorSchema.safeParse(raw);
@@ -96,20 +114,16 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
 
   const [activePeriod, indicatorsData, currentUser] = await Promise.all([
     db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
-    db.select().from(indicatorsTable).orderBy(asc(indicatorsTable.category), asc(indicatorsTable.name)),
+    db.select().from(indicatorsTable).orderBy(asc(indicatorsTable.evaluatorRole), asc(indicatorsTable.evaluateeRole), asc(indicatorsTable.name)) as any,
     session.userId ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
-
-  const indicators = indicatorsData;
 
   const success = params?.success ? decodeURIComponent(params.success) : undefined;
   const error = params?.error ? decodeURIComponent(params.error) : undefined;
   const alert = (params?.alert as "success" | "error" | "info") ?? (error ? "error" : "success");
 
-  const totalIndicators = indicators.length;
-  const activeIndicators = indicators.filter((i: any) => i.isActive).length;
-  const hardCount = indicators.filter((i: any) => i.category === "hard").length;
-  const softCount = indicators.filter((i: any) => i.category === "soft").length;
+  const totalIndicators = (indicatorsData as any[]).length;
+  const activeIndicators = (indicatorsData as any[]).filter((i) => i.isActive).length;
 
   const sidebarStyle = {
     "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -126,7 +140,7 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold">Indikator Penilaian</h1>
-              <p className="text-muted-foreground text-sm">Kelola indikator hard/soft skill yang akan disalin ke event.</p>
+              <p className="text-muted-foreground text-sm">Kelola indikator per pasangan hierarki penilai → yang dinilai.</p>
             </div>
             <Sheet>
               <SheetTrigger asChild>
@@ -135,42 +149,21 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
               <SheetContent side="right" className="sm:max-w-md flex flex-col">
                 <SheetHeader>
                   <SheetTitle>Tambah Indikator</SheetTitle>
-                  <SheetDescription>Masukkan nama dan kategori indikator.</SheetDescription>
+                  <SheetDescription>Tentukan nama, kategori, dan hierarki penilaian.</SheetDescription>
                 </SheetHeader>
                 <div className="flex-1 overflow-y-auto">
-                  <form action={createIndicator} className="grid gap-3 p-4 pt-0">
-                    <label className="text-sm font-medium text-foreground">
-                      Nama
-                      <Input name="name" placeholder="Kerja sama tim" required className="mt-1" />
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Kategori
-                      <select name="category" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {categories.map((c) => (
-                          <option key={c.value} value={c.value}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                      <input name="isActive" type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
-                      Aktif
-                    </label>
-                    <Button type="submit" className="mt-1">
-                      Simpan
-                    </Button>
-                  </form>
+                  <IndicatorForm action={createIndicator} />
                 </div>
               </SheetContent>
             </Sheet>
           </div>
 
+          {/* Ringkasan */}
           <Card className="border-primary/10">
             <CardHeader className="flex flex-row items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-xl font-semibold">Ringkasan Indikator</CardTitle>
-                <p className="text-muted-foreground text-sm">Hitung cepat status aktif dan kategori.</p>
+                <p className="text-muted-foreground text-sm">Hitung cepat status aktif indikator.</p>
               </div>
               {activePeriod ? <Badge variant="outline">Aktif: {activePeriod.name}</Badge> : <Badge variant="outline">Belum ada periode aktif</Badge>}
             </CardHeader>
@@ -179,8 +172,6 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
                 {[
                   { label: "Total", value: totalIndicators },
                   { label: "Aktif", value: activeIndicators },
-                  { label: "Hard", value: hardCount },
-                  { label: "Soft", value: softCount },
                 ].map((stat) => (
                   <div key={stat.label} className="border-border/60 bg-card/60 rounded-lg border px-3 py-3 shadow-xs">
                     <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{stat.label}</p>
@@ -191,96 +182,91 @@ export default async function IndicatorsPage({ searchParams }: IndicatorsPagePro
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Daftar Indikator</CardTitle>
-                <p className="text-muted-foreground text-sm">Edit cepat nama, kategori, dan status.</p>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table className="min-w-full">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-4">Nama</TableHead>
-                      <TableHead>Kategori</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[148px] pr-4 text-center">Aksi</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {indicators.map((indicator: any) => (
-                      <TableRow key={indicator.id}>
-                        <TableCell className="pl-4 font-medium">{indicator.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{categories.find((c) => c.value === indicator.category)?.label ?? indicator.category}</TableCell>
-                        <TableCell>
-                          <Badge variant={indicator.isActive ? "default" : "outline"}>{indicator.isActive ? "Aktif" : "Nonaktif"}</Badge>
-                        </TableCell>
-                        <TableCell className="pr-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <Sheet>
-                              <SheetTrigger asChild>
-                                <Button variant="outline" size="icon" aria-label="Edit indikator">
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                              </SheetTrigger>
-                              <SheetContent side="right" className="sm:max-w-md flex flex-col">
-                                <SheetHeader>
-                                  <SheetTitle>Edit Indikator</SheetTitle>
-                                  <SheetDescription>Perbarui nama, kategori, atau status indikator.</SheetDescription>
-                                </SheetHeader>
-                                <div className="flex-1 overflow-y-auto">
-                                  <form action={updateIndicator} className="grid gap-3 p-4 pt-0">
-                                    <input type="hidden" name="id" value={indicator.id} />
-                                    <label className="text-sm font-medium text-foreground">
-                                      Nama
-                                      <Input name="name" defaultValue={indicator.name} required className="mt-1" />
-                                    </label>
-                                    <label className="text-sm font-medium text-foreground">
-                                      Kategori
-                                      <select name="category" defaultValue={indicator.category} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                        {categories.map((c) => (
-                                          <option key={c.value} value={c.value}>
-                                            {c.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                    <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                                      <input name="isActive" type="checkbox" defaultChecked={indicator.isActive} className="h-4 w-4 rounded border-border" />
-                                      Aktif
-                                    </label>
-                                    <Button type="submit" className="mt-1">
-                                      Simpan
-                                    </Button>
-                                  </form>
-                                </div>
-                              </SheetContent>
-                            </Sheet>
+          {/* Tabel dikelompokkan per pasangan hierarki */}
+          {HIERARCHY_PAIRS.map(({ evaluatorRole, evaluateeRole }) => {
+            const group = (indicatorsData as any[]).filter(
+              (i) => i.evaluatorRole === evaluatorRole && i.evaluateeRole === evaluateeRole
+            );
 
-                            <ConfirmForm action={deleteIndicator}>
-                              <input type="hidden" name="id" value={indicator.id} />
-                              <Button type="submit" variant="ghost" size="icon" aria-label="Hapus indikator" className="text-destructive hover:text-destructive">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </ConfirmForm>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {indicators.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                          Belum ada indikator.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+            return (
+              <Card key={`${evaluatorRole}-${evaluateeRole}`} className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Badge variant="outline" className="font-semibold">{ROLE_LABELS[evaluatorRole]}</Badge>
+                    <span className="text-muted-foreground text-sm">menilai</span>
+                    <Badge variant="outline" className="font-semibold">{ROLE_LABELS[evaluateeRole]}</Badge>
+                    <span className="ml-auto text-xs text-muted-foreground font-normal">{group.length} indikator</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table className="min-w-full">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="pl-4">Nama</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="pr-4 text-right">Aksi</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {group.map((indicator: any) => (
+                          <TableRow key={indicator.id}>
+                            <TableCell className="pl-4 font-medium">{indicator.name}</TableCell>
+                            <TableCell>
+                              <Badge variant={indicator.isActive ? "default" : "outline"}>{indicator.isActive ? "Aktif" : "Nonaktif"}</Badge>
+                            </TableCell>
+                            <TableCell className="pr-4">
+                              <div className="flex items-center justify-end gap-2">
+                                <Sheet>
+                                  <SheetTrigger asChild>
+                                    <Button variant="outline" size="icon" aria-label="Edit indikator">
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                  </SheetTrigger>
+                                  <SheetContent side="right" className="sm:max-w-md flex flex-col">
+                                    <SheetHeader>
+                                      <SheetTitle>Edit Indikator</SheetTitle>
+                                      <SheetDescription>Perbarui nama, hierarki, atau status.</SheetDescription>
+                                    </SheetHeader>
+                                    <div className="flex-1 overflow-y-auto">
+                                      <IndicatorForm
+                                        action={updateIndicator}
+                                        defaultValues={{
+                                          id: indicator.id,
+                                          name: indicator.name,
+                                          evaluatorRole: indicator.evaluatorRole,
+                                          evaluateeRole: indicator.evaluateeRole,
+                                          isActive: indicator.isActive,
+                                        }}
+                                      />
+                                    </div>
+                                  </SheetContent>
+                                </Sheet>
+
+                                <ConfirmForm action={deleteIndicator}>
+                                  <input type="hidden" name="id" value={indicator.id} />
+                                  <Button type="submit" variant="ghost" size="icon" aria-label="Hapus indikator" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </ConfirmForm>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {group.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="pl-4 text-sm text-muted-foreground py-3">
+                              Belum ada indikator untuk kombinasi ini.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
     </SidebarShell>

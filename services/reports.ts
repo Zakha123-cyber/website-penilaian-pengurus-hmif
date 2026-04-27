@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { evaluationEvents, evaluations, indicatorSnapshots, periods, prokers, users, divisions, evaluationScores } from "@/lib/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { evaluationEvents, evaluations, users, evaluationScores } from "@/lib/schema";
+import { eq, and, sql } from "drizzle-orm";
 import { isKadivPSDM } from "@/lib/permissions";
 import { exportEventToXlsx } from "@/utils/excel";
 
@@ -98,8 +98,7 @@ export async function getEventReport(eventId: string, session: Session) {
       division: string | null;
       raterCount: number;
       overallAvg: number;
-      categoryAvg: Record<string, number>;
-      indicators: Array<{ id: string; name: string; category: string; avg: number }>;
+      indicators: Array<{ id: string; name: string; avg: number }>;
       feedback: string[];
     }
   > = {};
@@ -113,7 +112,6 @@ export async function getEventReport(eventId: string, session: Session) {
         division: ev.evaluatee.division?.name ?? null,
         raterCount: 0,
         overallAvg: 0,
-        categoryAvg: {},
         indicators: [],
         feedback: [],
       };
@@ -127,15 +125,10 @@ export async function getEventReport(eventId: string, session: Session) {
     bucket.overallAvg += avgScore;
 
     for (const s of ev.scores) {
-      const cat = s.indicatorSnapshot.indicator.category;
-      bucket.categoryAvg[cat] = (bucket.categoryAvg[cat] ?? 0) + s.score;
-    }
-
-    for (const s of ev.scores) {
       const indId = s.indicatorSnapshot.indicatorId;
       const existing = bucket.indicators.find((i: any) => i.id === indId);
       if (existing) existing.avg += s.score;
-      else bucket.indicators.push({ id: indId, name: s.indicatorSnapshot.indicator.name, category: s.indicatorSnapshot.indicator.category, avg: s.score });
+      else bucket.indicators.push({ id: indId, name: s.indicatorSnapshot.indicator.name, avg: s.score });
     }
 
     if (ev.feedback) bucket.feedback.push(ev.feedback);
@@ -144,15 +137,10 @@ export async function getEventReport(eventId: string, session: Session) {
   const results = Object.values(byEvaluatee).map((item) => {
     const divisor = item.raterCount || 1;
     const indicators = item.indicators.map((i: any) => ({ ...i, avg: i.avg / divisor }));
-    const categoryAvg: Record<string, number> = {};
-    for (const [cat, sum] of Object.entries(item.categoryAvg)) {
-      categoryAvg[cat] = (sum as number) / divisor;
-    }
     return {
       ...item,
       overallAvg: item.overallAvg / divisor,
       indicators,
-      categoryAvg,
     };
   });
 
@@ -165,7 +153,7 @@ export async function getEventReport(eventId: string, session: Session) {
       proker: event.proker?.name ?? null,
       startDate: event.startDate,
       endDate: event.endDate,
-      indicators: event.indicators.map((i: any) => ({ id: i.id, name: i.indicator.name, category: i.indicator.category })),
+      indicators: event.indicators.map((i: any) => ({ id: i.id, name: i.indicator.name })),
     },
     results,
     stats: {
@@ -181,26 +169,18 @@ export async function exportEventReport(eventId: string, session: Session): Prom
   const report = await getEventReport(eventId, session);
   const lines: string[] = [];
   lines.push(`Event,"${report.event.name}",Type,${report.event.type},Period,"${report.event.period}",Proker,"${report.event.proker ?? ""}"`);
-  lines.push("Evaluatee,Division,Rater Count,Overall Avg,Category,Category Avg");
+  lines.push("Evaluatee,Division,Rater Count,Overall Avg");
 
   for (const r of report.results) {
-    if (Object.keys(r.categoryAvg).length === 0) {
-      lines.push(`"${r.name}","${r.division ?? ""}",${r.raterCount},${r.overallAvg.toFixed(2)},,,`);
-    } else {
-      let first = true;
-      for (const [cat, val] of Object.entries(r.categoryAvg)) {
-        lines.push(`"${r.name}","${r.division ?? ""}",${first ? r.raterCount : ""},${first ? r.overallAvg.toFixed(2) : ""},${cat},${(val as number).toFixed(2)}`);
-        first = false;
-      }
-    }
+    lines.push(`"${r.name}","${r.division ?? ""}",${r.raterCount},${r.overallAvg.toFixed(2)}`);
   }
 
   lines.push("");
   lines.push("Per Indicator");
-  lines.push("Evaluatee,Division,Indicator,Category,Avg");
+  lines.push("Evaluatee,Division,Indicator,Avg");
   for (const r of report.results) {
     for (const ind of r.indicators) {
-      lines.push(`"${r.name}","${r.division ?? ""}","${ind.name}",${ind.category},${ind.avg.toFixed(2)}`);
+      lines.push(`"${r.name}","${r.division ?? ""}","${ind.name}",${ind.avg.toFixed(2)}`);
     }
   }
 

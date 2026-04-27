@@ -9,7 +9,7 @@ type Report = {
     proker: string | null;
     startDate: Date | string;
     endDate: Date | string;
-    indicators: Array<{ id: string; name: string; category: string }>;
+    indicators: Array<{ id: string; name: string }>;
   };
   results: Array<{
     evaluateeId: string;
@@ -17,8 +17,7 @@ type Report = {
     division: string | null;
     raterCount: number;
     overallAvg: number;
-    categoryAvg: Record<string, number>;
-    indicators: Array<{ id: string; name: string; category: string; avg: number }>;
+    indicators: Array<{ id: string; name: string; avg: number }>;
     feedback: string[];
   }>;
 };
@@ -35,30 +34,21 @@ export function exportEventToXlsx(report: Report): Uint8Array {
     ["Start", formatDate(report.event.startDate)],
     ["End", formatDate(report.event.endDate)],
     [],
-    ["Evaluatee", "Division", "Rater Count", "Overall Avg", "Category", "Category Avg"],
+    ["Evaluatee", "Division", "Rater Count", "Overall Avg"],
   ];
 
   for (const r of report.results) {
-    const cats = Object.entries(r.categoryAvg);
-    if (cats.length === 0) {
-      summaryData.push([r.name, r.division ?? "", r.raterCount, fix2(r.overallAvg), "", ""]);
-    } else {
-      let first = true;
-      for (const [cat, val] of cats) {
-        summaryData.push([r.name, r.division ?? "", first ? r.raterCount : "", first ? fix2(r.overallAvg) : "", cat, fix2(val)]);
-        first = false;
-      }
-    }
+    summaryData.push([r.name, r.division ?? "", r.raterCount, fix2(r.overallAvg)]);
   }
 
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
 
   // Per-indicator sheet
-  const indicatorData: any[][] = [["Evaluatee", "Division", "Indicator", "Category", "Avg"]];
+  const indicatorData: any[][] = [["Evaluatee", "Division", "Indicator", "Avg"]];
   for (const r of report.results) {
     for (const ind of r.indicators) {
-      indicatorData.push([r.name, r.division ?? "", ind.name, ind.category, fix2(ind.avg)]);
+      indicatorData.push([r.name, r.division ?? "", ind.name, fix2(ind.avg)]);
     }
   }
   const indicatorSheet = XLSX.utils.aoa_to_sheet(indicatorData);

@@ -45,7 +45,7 @@ export default async function EvaluationsPage({ searchParams }: PageProps) {
       )
       .where(
         and(
-          eq(evaluationEvents.isOpen, 1),
+          eq(evaluationEvents.isOpen, true),
           lte(evaluationEvents.startDate, now),
           gte(evaluationEvents.endDate, now)
         )

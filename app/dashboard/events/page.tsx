@@ -82,7 +82,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
       });
 
       // Generate assignments (uses global db, but run after TX is committed for safety or if TX passed)
-      await generateAssignmentsForEvent({ id: newId, type: type as "PERIODIC" | "PROKER", periodId, prokerId });
+      await generateAssignmentsForEvent({ id: newId, type: type as "PERIODIC" | "PROKER", periodId, prokerId: prokerId ?? null });
 
       revalidatePath("/dashboard/events");
       redirect(`/dashboard/events?success=${encodeURIComponent("Event dibuat")}&alert=success`);
@@ -174,7 +174,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
     }),
     db.query.indicators.findMany({
       where: eq(indicators.isActive, true),
-      orderBy: [asc(indicators.category), asc(indicators.name)]
+      orderBy: [asc(indicators.name)]
     }),
     db.query.evaluationEvents.findMany({
       orderBy: [desc(evaluationEvents.startDate)],
@@ -282,19 +282,47 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                         <Input name="endDate" type="date" required className="mt-1" />
                       </label>
                     </div>
-                    <div className="space-y-2 rounded-lg border border-border/60 bg-card/40 p-3">
+                    <div className="space-y-3 rounded-lg border border-border/60 bg-card/40 p-3">
                       <p className="text-sm font-semibold text-foreground">Pilih indikator</p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {indicatorsData.map((ind) => (
-                          <label key={ind.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
-                            <input name="indicatorIds" value={ind.id} type="checkbox" className="h-4 w-4 rounded border-border" />
-                            <span>
-                              {ind.name} ({ind.category})
-                            </span>
-                          </label>
-                        ))}
-                        {indicatorsData.length === 0 && <div className="text-sm text-muted-foreground">Belum ada indikator aktif.</div>}
-                      </div>
+                      {(() => {
+                        const ROLE_LABELS: Record<string, string> = { BPI: "BPI", KADIV: "Kepala Divisi", KASUBDIV: "Kepala Sub Divisi", ANGGOTA: "Anggota" };
+                        const PAIRS = [
+                          { evaluatorRole: "BPI", evaluateeRole: "KADIV" },
+                          { evaluatorRole: "BPI", evaluateeRole: "KASUBDIV" },
+                          { evaluatorRole: "KADIV", evaluateeRole: "BPI" },
+                          { evaluatorRole: "KADIV", evaluateeRole: "KASUBDIV" },
+                          { evaluatorRole: "KADIV", evaluateeRole: "ANGGOTA" },
+                          { evaluatorRole: "KASUBDIV", evaluateeRole: "KADIV" },
+                          { evaluatorRole: "KASUBDIV", evaluateeRole: "ANGGOTA" },
+                          { evaluatorRole: "ANGGOTA", evaluateeRole: "BPI" },
+                          { evaluatorRole: "ANGGOTA", evaluateeRole: "KADIV" },
+                          { evaluatorRole: "ANGGOTA", evaluateeRole: "KASUBDIV" },
+                          { evaluatorRole: "ANGGOTA", evaluateeRole: "ANGGOTA" },
+                        ];
+                        return PAIRS.map(({ evaluatorRole, evaluateeRole }) => {
+                          const group = indicatorsData.filter(
+                            (ind) => ind.evaluatorRole === evaluatorRole && ind.evaluateeRole === evaluateeRole
+                          );
+                          return (
+                            <div key={`${evaluatorRole}-${evaluateeRole}`} className="space-y-1.5">
+                              <p className="text-xs font-semibold text-muted-foreground">
+                                {ROLE_LABELS[evaluatorRole]} → {ROLE_LABELS[evaluateeRole]}
+                              </p>
+                              {group.length === 0 && (
+                                <p className="text-xs text-muted-foreground italic pl-1">Tidak ada indikator.</p>
+                              )}
+                              <div className="grid gap-1.5 sm:grid-cols-2">
+                                {group.map((ind) => (
+                                  <label key={ind.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
+                                    <input name="indicatorIds" value={ind.id} type="checkbox" className="h-4 w-4 rounded border-border" />
+                                    <span>{ind.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                     <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
                       <input name="isOpen" type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
@@ -421,7 +449,6 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                                         {ev.indicators.map((snap) => (
                                           <div key={snap.id} className="rounded border border-border px-3 py-2">
                                             <div className="font-medium">{snap.indicator.name}</div>
-                                            <div className="text-xs text-muted-foreground">{snap.indicator.category}</div>
                                           </div>
                                         ))}
                                         {ev.indicators.length === 0 && <div className="text-sm text-muted-foreground">Tidak ada indikator.</div>}

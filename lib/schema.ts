@@ -46,12 +46,20 @@ export const users = pgTable("user", {
     passwordUpdatedAt: timestamp("passwordUpdatedAt", { mode: "date", withTimezone: true }),
     periodId: varchar("periodId", { length: 36 }).notNull(),
     divisionId: varchar("divisionId", { length: 36 }),
+    subdivisionId: varchar("subdivisionId", { length: 36 }),
     createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
 export const divisions = pgTable("division", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+});
+
+export const subdivisions = pgTable("subdivision", {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    divisionId: varchar("divisionId", { length: 36 }).notNull(),
     createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -84,7 +92,8 @@ export const evaluationEvents = pgTable("evaluationevent", {
 export const indicators = pgTable("indicator", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    category: varchar("category", { length: 255 }).notNull(),
+    evaluatorRole: roleEnum("evaluatorRole").notNull(),
+    evaluateeRole: roleEnum("evaluateeRole").notNull(),
     isActive: boolean("isActive").notNull().default(true),
     createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });
@@ -147,6 +156,7 @@ export const periodsRelations = relations(periods, ({ many }) => ({
 export const usersRelations = relations(users, ({ one, many }) => ({
     period: one(periods, { fields: [users.periodId], references: [periods.id] }),
     division: one(divisions, { fields: [users.divisionId], references: [divisions.id] }),
+    subdivision: one(subdivisions, { fields: [users.subdivisionId], references: [subdivisions.id] }),
     panitia: many(panitia),
     evaluationsGiven: many(evaluations, { relationName: "evaluator" }),
     evaluationsReceived: many(evaluations, { relationName: "evaluatee" }),
@@ -156,6 +166,12 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 export const divisionsRelations = relations(divisions, ({ many }) => ({
     users: many(users),
     prokers: many(prokers),
+    subdivisions: many(subdivisions),
+}));
+
+export const subdivisionsRelations = relations(subdivisions, ({ one, many }) => ({
+    division: one(divisions, { fields: [subdivisions.divisionId], references: [divisions.id] }),
+    users: many(users),
 }));
 
 export const prokersRelations = relations(prokers, ({ one, many }) => ({
@@ -211,6 +227,7 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
 export type Period = typeof periods.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Division = typeof divisions.$inferSelect;
+export type Subdivision = typeof subdivisions.$inferSelect;
 export type Proker = typeof prokers.$inferSelect;
 export type Panitia = typeof panitia.$inferSelect;
 export type EvaluationEvent = typeof evaluationEvents.$inferSelect;

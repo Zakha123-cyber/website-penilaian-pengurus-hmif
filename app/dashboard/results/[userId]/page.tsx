@@ -44,8 +44,7 @@ export default async function MemberDetailPage({ params, searchParams }: PagePro
     const dateFmt = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" });
     const typeLabel = report.event.type === "PROKER" ? "Event Proker" : "Event Periodik";
 
-    const hardIndicators = memberResult.indicators.filter((i) => i.category === "hardskill");
-    const softIndicators = memberResult.indicators.filter((i) => i.category === "softskill");
+    const allIndicators = memberResult.indicators;
 
     return (
         <SidebarShell user={currentUser ? { name: currentUser.name, email: currentUser.email ?? undefined } : undefined}>
@@ -98,55 +97,16 @@ export default async function MemberDetailPage({ params, searchParams }: PagePro
                         </div>
                     </div>
 
-                    {/* Category averages */}
-                    {Object.keys(memberResult.categoryAvg).length > 0 && (
+                    {/* Per indicator */}
+                    {allIndicators.length > 0 && (
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-base">Rata-rata per Kategori</CardTitle>
+                                <CardTitle className="text-base">Per Indikator</CardTitle>
+                                <p className="text-muted-foreground text-sm">Rata-rata skor per indikator.</p>
                             </CardHeader>
                             <CardContent>
                                 <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                                    {Object.entries(memberResult.categoryAvg).map(([cat, val]) => (
-                                        <div key={cat} className="border-border/60 bg-muted/30 rounded-lg border px-4 py-3">
-                                            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{cat}</p>
-                                            <p className="text-2xl font-semibold tabular-nums mt-1">{(val as number).toFixed(2)}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Per indicator — hard skills */}
-                    {hardIndicators.length > 0 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Hard Skill</CardTitle>
-                                <p className="text-muted-foreground text-sm">Rata-rata skor per indikator hard skill.</p>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                                    {hardIndicators.map((ind) => (
-                                        <div key={ind.id} className="border-border/60 rounded-lg border px-4 py-3">
-                                            <p className="text-sm font-medium leading-snug">{ind.name}</p>
-                                            <p className="text-2xl font-semibold tabular-nums mt-1">{ind.avg.toFixed(2)}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Per indicator — soft skills */}
-                    {softIndicators.length > 0 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Soft Skill</CardTitle>
-                                <p className="text-muted-foreground text-sm">Rata-rata skor per indikator soft skill.</p>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                                    {softIndicators.map((ind) => (
+                                    {allIndicators.map((ind) => (
                                         <div key={ind.id} className="border-border/60 rounded-lg border px-4 py-3">
                                             <p className="text-sm font-medium leading-snug">{ind.name}</p>
                                             <p className="text-2xl font-semibold tabular-nums mt-1">{ind.avg.toFixed(2)}</p>

@@ -6,33 +6,25 @@ import nodemailer from "nodemailer";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 import { db } from "@/lib/db";
-import { users as usersTable, periods, divisions as divisionsTable } from "@/lib/schema";
-import { eq, desc, asc, and } from "drizzle-orm";
+import { users as usersTable, periods, divisions as divisionsTable, subdivisions as subdivisionsTable } from "@/lib/schema";
+import { eq, desc, asc } from "drizzle-orm";
 
 import { Info, Pencil, Trash2 } from "lucide-react";
 
 import { ConfirmForm } from "@/components/confirm-form";
 import { SingleSendButton, BulkSendButton } from "@/components/send-credential-buttons";
+import { UserForm } from "@/components/user-form";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SiteHeader } from "@/components/site-header";
 import { SuccessAlert } from "@/components/success-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { createUserSchema, updateUserSchema } from "@/lib/validation";
-
-const roles = [
-  { value: "ADMIN", label: "Admin" },
-  { value: "BPI", label: "BPI" },
-  { value: "KADIV", label: "Kepala Divisi" },
-  { value: "KASUBDIV", label: "Kepala Sub Divisi" },
-  { value: "ANGGOTA", label: "Anggota" },
-];
 
 type UsersPageProps = { searchParams: Promise<Record<string, string | undefined>> };
 
@@ -55,6 +47,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       role: String(formData.get("role") ?? ""),
       periodId: String(formData.get("periodId") ?? ""),
       divisionId: String(formData.get("divisionId") ?? ""),
+      subdivisionId: String(formData.get("subdivisionId") ?? ""),
       password: require("crypto").randomUUID().slice(0, 16),
       isActive: formData.get("isActive") === "on",
     };
@@ -65,7 +58,6 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     const { password, ...data } = parsed.data;
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Simpan user ke database
     try {
       await db.insert(usersTable).values({ id: crypto.randomUUID(), ...data, passwordHash });
     } catch (error: any) {
@@ -145,6 +137,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       role: String(formData.get("role") ?? ""),
       periodId: String(formData.get("periodId") ?? ""),
       divisionId: String(formData.get("divisionId") ?? ""),
+      subdivisionId: String(formData.get("subdivisionId") ?? ""),
       password: "",
       isActive: formData.get("isActive") === "on",
     };
@@ -180,11 +173,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     redirect(`/dashboard/users?success=${encodeURIComponent("User dihapus")}&alert=success`);
   }
 
-  const [activePeriod, periodsData, divisionsData, allUsersData, currentUser] = await Promise.all([
+  const [activePeriod, periodsData, divisionsData, subdivisionsData, allUsersData, currentUser] = await Promise.all([
     db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
     db.query.periods.findMany({ orderBy: [desc(periods.startYear)] }),
     db.query.divisions.findMany({ orderBy: [asc(divisionsTable.name)], with: { users: { columns: { id: true } } } }),
-    db.query.users.findMany({ orderBy: [asc(usersTable.name)], with: { period: true, division: true } }),
+    db.query.subdivisions.findMany({ orderBy: [asc(subdivisionsTable.name)] }),
+    db.query.users.findMany({ orderBy: [asc(usersTable.name)], with: { period: true, division: true, subdivision: true } }),
     session.userId ? db.query.users.findFirst({ where: eq(usersTable.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
 
@@ -235,58 +229,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                     <SheetTitle>Tambah User</SheetTitle>
                     <SheetDescription>Masukkan data user baru.</SheetDescription>
                   </SheetHeader>
-                  <form action={createUser} className="grid gap-3 p-4 pt-0">
-                    <label className="text-sm font-medium text-foreground">
-                      Nama
-                      <Input name="name" placeholder="Nama lengkap" required className="mt-1" />
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      NIM
-                      <Input name="nim" placeholder="0001" required className="mt-1" />
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Email
-                      <Input name="email" type="email" placeholder="opsional" className="mt-1" />
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Role
-                      <select name="role" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {roles.map((role) => (
-                          <option key={role.value} value={role.value}>
-                            {role.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Periode
-                      <select name="periodId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {periodsData.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Divisi
-                      <select name="divisionId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        <option value="">(Tanpa divisi)</option>
-                        {divisionsData.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
-                      <input name="isActive" type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
-                      Aktif
-                    </label>
-                    <Button type="submit" className="mt-2">
-                      Simpan
-                    </Button>
-                  </form>
+                  <UserForm
+                    action={createUser}
+                    divisions={divisionsData}
+                    subdivisions={subdivisionsData}
+                    periods={periodsData}
+                  />
                 </SheetContent>
               </Sheet>
             </div>
@@ -351,6 +299,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                       <TableHead>Username</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Divisi</TableHead>
+                      <TableHead>Subdivisi</TableHead>
                       <TableHead>Periode</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-[148px] pr-4 text-center">Aksi</TableHead>
@@ -363,6 +312,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                         <TableCell className="text-muted-foreground">{user.nim}</TableCell>
                         <TableCell>{user.role}</TableCell>
                         <TableCell>{user.division?.name ?? "-"}</TableCell>
+                        <TableCell>{user.subdivision?.name ?? "-"}</TableCell>
                         <TableCell>{user.period?.name ?? "-"}</TableCell>
                         <TableCell>
                           <Badge variant={user.isActive ? "default" : "outline"}>{user.isActive ? "Aktif" : "Nonaktif"}</Badge>
@@ -414,6 +364,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                       <p className="font-medium">{user.division?.name ?? "-"}</p>
                                     </div>
                                   </div>
+                                  {user.subdivision && (
+                                    <div>
+                                      <p className="text-muted-foreground">Subdivisi</p>
+                                      <p className="font-medium">{user.subdivision.name}</p>
+                                    </div>
+                                  )}
                                   <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
                                     <p className="font-semibold text-foreground">Kredensial</p>
                                     <p>Username: {user.nim}</p>
@@ -434,60 +390,24 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                   <SheetTitle>Edit User</SheetTitle>
                                   <SheetDescription>Perbarui data user. Kosongkan password jika tidak diubah.</SheetDescription>
                                 </SheetHeader>
-                                <form action={updateUser} className="grid gap-3 p-4 pt-0">
-                                  <input type="hidden" name="id" value={user.id} />
-                                  <label className="text-sm font-medium text-foreground">
-                                    Nama
-                                    <Input name="name" defaultValue={user.name} required className="mt-1" />
-                                  </label>
-                                  <label className="text-sm font-medium text-foreground">
-                                    NIM
-                                    <Input name="nim" defaultValue={user.nim} required className="mt-1" />
-                                  </label>
-                                  <label className="text-sm font-medium text-foreground">
-                                    Email
-                                    <Input name="email" type="email" defaultValue={user.email ?? ""} className="mt-1" />
-                                  </label>
-                                  <label className="text-sm font-medium text-foreground">
-                                    Role
-                                    <select name="role" defaultValue={user.role} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                      {roles.map((role) => (
-                                        <option key={role.value} value={role.value}>
-                                          {role.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <label className="text-sm font-medium text-foreground">
-                                    Periode
-                                    <select name="periodId" defaultValue={user.periodId} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                      {periodsData.map((p) => (
-                                        <option key={p.id} value={p.id}>
-                                          {p.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <label className="text-sm font-medium text-foreground">
-                                    Divisi
-                                    <select name="divisionId" defaultValue={user.divisionId ?? ""} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                                      <option value="">(Tanpa divisi)</option>
-                                      {divisionsData.map((d) => (
-                                        <option key={d.id} value={d.id}>
-                                          {d.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-
-                                  <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
-                                    <input name="isActive" type="checkbox" defaultChecked={user.isActive} className="h-4 w-4 rounded border-border" />
-                                    Aktif
-                                  </label>
-                                  <Button type="submit" className="mt-2">
-                                    Simpan
-                                  </Button>
-                                </form>
+                                <UserForm
+                                  action={updateUser}
+                                  divisions={divisionsData}
+                                  subdivisions={subdivisionsData}
+                                  periods={periodsData}
+                                  defaultValues={{
+                                    id: user.id,
+                                    name: user.name,
+                                    nim: user.nim,
+                                    email: user.email ?? "",
+                                    role: user.role,
+                                    periodId: user.periodId,
+                                    divisionId: user.divisionId ?? "",
+                                    subdivisionId: user.subdivisionId ?? "",
+                                    isActive: user.isActive,
+                                  }}
+                                  showPassword
+                                />
                               </SheetContent>
                             </Sheet>
 

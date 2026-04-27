@@ -1,33 +1,19 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "mysql",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1776608785844,
-      "tag": "0000_cool_mad_thinker",
+      "version": "5",
+      "when": 1777319826780,
+      "tag": "0000_abandoned_wendell_vaughn",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "7",
-      "when": 1745712000000,
-      "tag": "0001_add_subdivision",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1745798400000,
-      "tag": "0002_add_indicator_roles",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1745884800000,
-      "tag": "0003_remove_indicator_category",
+      "version": "5",
+      "when": 1777320827401,
+      "tag": "0001_zippy_sentry",
       "breakpoints": true
     }
   ]

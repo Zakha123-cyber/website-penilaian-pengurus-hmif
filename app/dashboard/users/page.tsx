@@ -49,7 +49,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       divisionId: String(formData.get("divisionId") ?? ""),
       subdivisionId: String(formData.get("subdivisionId") ?? ""),
       password: require("crypto").randomUUID().slice(0, 16),
-      isActive: formData.get("isActive") === "on",
+      isActive: formData.get("isActive") === "on" ? 1 : 0,
     };
 
     const parsed = createUserSchema.safeParse(raw);
@@ -139,7 +139,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       divisionId: String(formData.get("divisionId") ?? ""),
       subdivisionId: String(formData.get("subdivisionId") ?? ""),
       password: "",
-      isActive: formData.get("isActive") === "on",
+      isActive: formData.get("isActive") === "on" ? 1 : 0,
     };
 
     const parsed = updateUserSchema.safeParse(raw);
@@ -174,7 +174,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   }
 
   const [activePeriod, periodsData, divisionsData, subdivisionsData, allUsersData, currentUser] = await Promise.all([
-    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findFirst({ where: eq(periods.isActive, 1), orderBy: [desc(periods.startYear)] }),
     db.query.periods.findMany({ orderBy: [desc(periods.startYear)] }),
     db.query.divisions.findMany({ orderBy: [asc(divisionsTable.name)], with: { users: { columns: { id: true } } } }),
     db.query.subdivisions.findMany({ orderBy: [asc(subdivisionsTable.name)] }),
@@ -188,7 +188,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const alert = params?.alert;
 
   const totalUsers = users.length;
-  const activeUsers = users.filter((u) => u.isActive).length;
+  const activeUsers = users.filter((u) => u.isActive === 1).length;
   const inactiveUsers = totalUsers - activeUsers;
 
   const stats = [
@@ -219,7 +219,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               <p className="text-muted-foreground text-sm">Kelola akun, role, dan divisi.</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-              <BulkSendButton nims={users.filter(u => u.isActive && !!u.email).map(u => u.nim)} />
+              <BulkSendButton nims={users.filter(u => u.isActive === 1 && !!u.email).map(u => u.nim)} />
               <Sheet>
                 <SheetTrigger asChild>
                   <Button>Tambah User</Button>
@@ -315,11 +315,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                         <TableCell>{user.subdivision?.name ?? "-"}</TableCell>
                         <TableCell>{user.period?.name ?? "-"}</TableCell>
                         <TableCell>
-                          <Badge variant={user.isActive ? "default" : "outline"}>{user.isActive ? "Aktif" : "Nonaktif"}</Badge>
+                          <Badge variant={user.isActive === 1 ? "default" : "outline"}>{user.isActive === 1 ? "Aktif" : "Nonaktif"}</Badge>
                         </TableCell>
                         <TableCell className="w-[148px] pr-4">
                           <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                            <SingleSendButton nim={user.nim} disabled={!user.email || !user.isActive} />
+                            <SingleSendButton nim={user.nim} disabled={!user.email || user.isActive !== 1} />
                             <Sheet>
                               <SheetTrigger asChild>
                                 <Button variant="outline" size="icon" aria-label="Detail user">
@@ -351,7 +351,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                     </div>
                                     <div>
                                       <p className="text-muted-foreground">Status</p>
-                                      <Badge variant={user.isActive ? "default" : "outline"}>{user.isActive ? "Aktif" : "Nonaktif"}</Badge>
+                                      <Badge variant={user.isActive === 1 ? "default" : "outline"}>{user.isActive === 1 ? "Aktif" : "Nonaktif"}</Badge>
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
@@ -404,7 +404,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                     periodId: user.periodId,
                                     divisionId: user.divisionId ?? "",
                                     subdivisionId: user.subdivisionId ?? "",
-                                    isActive: user.isActive,
+                                    isActive: user.isActive === 1,
                                   }}
                                   showPassword
                                 />

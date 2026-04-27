@@ -60,7 +60,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
         where: inArray(evaluations.id, pendingActionIds),
         with: {
           evaluatee: { columns: { role: true } },
-          event: { with: { indicators: { with: { indicator: { columns: { evaluatorRole: true, evaluateeRole: true } } } } } },
+          event: { with: { indicators: { with: { indicator: { columns: { type: true, evaluatorRole: true, evaluateeRole: true } } } } } },
         },
       })
       : [];
@@ -86,7 +86,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
     }
 
     const now = new Date();
-    if (!eventData.isOpen || now < eventData.startDate || now > eventData.endDate) {
+    if (eventData.isOpen !== 1 || now < eventData.startDate || now > eventData.endDate) {
       redirect(`/evaluations/${eventId}?error=Event%20tidak%20sedang%20dibuka`);
     }
 
@@ -109,8 +109,9 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
       // Only score indicators matching this evaluator→evaluatee role pair
       const relevantSnaps = (evaluation.event.indicators as any[]).filter(
         (snap) =>
-          snap.indicator?.evaluatorRole === evaluatorRoleForAction &&
-          snap.indicator?.evaluateeRole === evaluateeRole
+          snap.indicator?.type === "PROKER" ||
+          (snap.indicator?.evaluatorRole === evaluatorRoleForAction &&
+            snap.indicator?.evaluateeRole === evaluateeRole)
       );
       const scores = relevantSnaps.map((snap: any) => ({
         indicatorSnapshotId: snap.id,
@@ -166,7 +167,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
       with: {
         period: { columns: { name: true } },
         proker: { columns: { name: true } },
-        indicators: { with: { indicator: { columns: { name: true, evaluatorRole: true, evaluateeRole: true } } } },
+        indicators: { with: { indicator: { columns: { name: true, type: true, evaluatorRole: true, evaluateeRole: true } } } },
       },
     }),
     db
@@ -209,7 +210,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
           },
           event: {
             columns: { isOpen: true },
-            with: { indicators: { columns: { id: true }, with: { indicator: { columns: { evaluatorRole: true, evaluateeRole: true } } } } },
+            with: { indicators: { columns: { id: true }, with: { indicator: { columns: { type: true, evaluatorRole: true, evaluateeRole: true } } } } },
           },
         },
         orderBy: [desc(evaluations.createdAt)],
@@ -256,8 +257,9 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
     const evaluateeRole = ev.evaluatee.role;
     const filteredIndicators = (ev.event.indicators ?? []).filter(
       (snap: any) =>
-        snap.indicator?.evaluatorRole === evaluatorRole &&
-        snap.indicator?.evaluateeRole === evaluateeRole
+        snap.indicator?.type === "PROKER" ||
+        (snap.indicator?.evaluatorRole === evaluatorRole &&
+          snap.indicator?.evaluateeRole === evaluateeRole)
     );
     return {
       id: ev.id,
@@ -266,7 +268,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
         division: ev.evaluatee.division ? { name: ev.evaluatee.division.name } : null,
       },
       event: {
-        isOpen: ev.event.isOpen,
+        isOpen: ev.event.isOpen === 1,
         indicators: filteredIndicators.map((snap: any) => ({
           id: snap.id,
           indicator: { name: indicatorsMap.get(snap.id) ?? snap.id },
@@ -302,7 +304,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
                 {formatDate(new Date(eventData.startDate))} – {formatDate(new Date(eventData.endDate))}
               </div>
             </div>
-            {!eventData.isOpen ? (
+            {eventData.isOpen !== 1 ? (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                 Event Ditutup
               </span>
@@ -348,7 +350,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
       {pendingEvals.length > 0 && (
         <EvaluationForm
           pending={pendingForClient}
-          eventIsOpen={eventData.isOpen}
+          eventIsOpen={eventData.isOpen === 1}
           submitAction={submitAllEvaluations}
         />
       )}

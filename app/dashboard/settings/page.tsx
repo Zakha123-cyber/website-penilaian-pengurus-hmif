@@ -17,7 +17,7 @@ export default async function SettingsPage() {
     if (!session) redirect("/login");
 
     const [activePeriod, currentUser] = await Promise.all([
-        db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+        db.query.periods.findFirst({ where: eq(periods.isActive, 1), orderBy: [desc(periods.startYear)] }),
         session.userId
             ? db.query.users.findFirst({
                 where: eq(users.id, session.userId),

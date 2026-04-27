@@ -1,20 +1,20 @@
 import {
-    pgTable,
-    pgEnum,
+    mysqlTable,
+    mysqlEnum,
     varchar,
-    boolean,
-    integer,
-    timestamp,
+    tinyint,
+    int,
+    datetime,
     text,
-    jsonb,
+    json,
     unique,
     index,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export const roleEnum = pgEnum("user_role", [
+export const roleEnum = mysqlEnum("role", [
     "ADMIN",
     "BPI",
     "KADIV",
@@ -22,89 +22,90 @@ export const roleEnum = pgEnum("user_role", [
     "KASUBDIV",
 ]);
 
-export const eventTypeEnum = pgEnum("evaluation_event_type", ["PERIODIC", "PROKER"]);
+export const eventTypeEnum = mysqlEnum("type", ["PERIODIC", "PROKER"]);
 
 // ─── Tables ───────────────────────────────────────────────────────────────────
 
-export const periods = pgTable("period", {
+export const periods = mysqlTable("period", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    isActive: boolean("isActive").notNull().default(false),
-    startYear: integer("startYear").notNull(),
-    endYear: integer("endYear").notNull(),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    isActive: tinyint("isActive").notNull().default(0),
+    startYear: int("startYear").notNull(),
+    endYear: int("endYear").notNull(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const users = pgTable("user", {
+export const users = mysqlTable("user", {
     id: varchar("id", { length: 36 }).primaryKey(),
     nim: varchar("nim", { length: 255 }).notNull().unique(),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }),
-    role: roleEnum("role").notNull(),
-    isActive: boolean("isActive").notNull().default(true),
+    role: mysqlEnum("role", ["ADMIN", "BPI", "KADIV", "ANGGOTA", "KASUBDIV"]).notNull(),
+    isActive: tinyint("isActive").notNull().default(1),
     passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
-    passwordUpdatedAt: timestamp("passwordUpdatedAt", { mode: "date", withTimezone: true }),
+    passwordUpdatedAt: datetime("passwordUpdatedAt", { mode: "date" }),
     periodId: varchar("periodId", { length: 36 }).notNull(),
     divisionId: varchar("divisionId", { length: 36 }),
     subdivisionId: varchar("subdivisionId", { length: 36 }),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const divisions = pgTable("division", {
+export const divisions = mysqlTable("division", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const subdivisions = pgTable("subdivision", {
+export const subdivisions = mysqlTable("subdivision", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     divisionId: varchar("divisionId", { length: 36 }).notNull(),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const prokers = pgTable("proker", {
+export const prokers = mysqlTable("proker", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     divisionId: varchar("divisionId", { length: 36 }).notNull(),
     periodId: varchar("periodId", { length: 36 }).notNull(),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const panitia = pgTable("panitia", {
+export const panitia = mysqlTable("panitia", {
     id: varchar("id", { length: 36 }).primaryKey(),
     userId: varchar("userId", { length: 36 }).notNull(),
     prokerId: varchar("prokerId", { length: 36 }).notNull(),
 });
 
-export const evaluationEvents = pgTable("evaluationevent", {
+export const evaluationEvents = mysqlTable("evaluationevent", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    type: eventTypeEnum("type").notNull(),
-    isOpen: boolean("isOpen").notNull().default(true),
-    startDate: timestamp("startDate", { mode: "date", withTimezone: true }).notNull(),
-    endDate: timestamp("endDate", { mode: "date", withTimezone: true }).notNull(),
+    type: mysqlEnum("type", ["PERIODIC", "PROKER"]).notNull(),
+    isOpen: tinyint("isOpen").notNull().default(1),
+    startDate: datetime("startDate", { mode: "date" }).notNull(),
+    endDate: datetime("endDate", { mode: "date" }).notNull(),
     periodId: varchar("periodId", { length: 36 }).notNull(),
     prokerId: varchar("prokerId", { length: 36 }),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const indicators = pgTable("indicator", {
+export const indicators = mysqlTable("indicator", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    evaluatorRole: roleEnum("evaluatorRole").notNull(),
-    evaluateeRole: roleEnum("evaluateeRole").notNull(),
-    isActive: boolean("isActive").notNull().default(true),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    type: mysqlEnum("type", ["PERIODIC", "PROKER"]).notNull().default("PERIODIC"),
+    evaluatorRole: mysqlEnum("evaluatorRole", ["ADMIN", "BPI", "KADIV", "ANGGOTA", "KASUBDIV"]),
+    evaluateeRole: mysqlEnum("evaluateeRole", ["ADMIN", "BPI", "KADIV", "ANGGOTA", "KASUBDIV"]),
+    isActive: tinyint("isActive").notNull().default(1),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const indicatorSnapshots = pgTable("indicatorsnapshot", {
+export const indicatorSnapshots = mysqlTable("indicatorsnapshot", {
     id: varchar("id", { length: 36 }).primaryKey(),
     indicatorId: varchar("indicatorId", { length: 36 }).notNull(),
     eventId: varchar("eventId", { length: 36 }).notNull(),
 });
 
-export const evaluations = pgTable(
+export const evaluations = mysqlTable(
     "evaluation",
     {
         id: varchar("id", { length: 36 }).primaryKey(),
@@ -112,32 +113,32 @@ export const evaluations = pgTable(
         evaluateeId: varchar("evaluateeId", { length: 36 }).notNull(),
         eventId: varchar("eventId", { length: 36 }).notNull(),
         feedback: text("feedback"),
-        createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+        createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
     },
     (table) => ({
         uniqueEval: unique().on(table.evaluatorId, table.evaluateeId, table.eventId),
     })
 );
 
-export const evaluationScores = pgTable("evaluationscore", {
+export const evaluationScores = mysqlTable("evaluationscore", {
     id: varchar("id", { length: 36 }).primaryKey(),
     evaluationId: varchar("evaluationId", { length: 36 }).notNull(),
     indicatorSnapshotId: varchar("indicatorSnapshotId", { length: 36 }).notNull(),
-    score: integer("score").notNull(),
-    createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    score: int("score").notNull(),
+    createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const auditLogs = pgTable(
+export const auditLogs = mysqlTable(
     "auditlog",
     {
         id: varchar("id", { length: 36 }).primaryKey(),
         userId: varchar("userId", { length: 36 }),
         action: varchar("action", { length: 255 }).notNull(),
-        success: boolean("success").notNull(),
+        success: tinyint("success").notNull(),
         ip: varchar("ip", { length: 255 }),
         userAgent: text("userAgent"),
-        metadata: jsonb("metadata"),
-        createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+        metadata: json("metadata"),
+        createdAt: datetime("createdAt", { mode: "date" }).notNull().$defaultFn(() => new Date()),
     },
     (table) => ({
         actionIdx: index("AuditLog_action_idx").on(table.action),

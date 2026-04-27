@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "bc462c85-6bd8-46bd-bda1-4fb28105f244",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "0fa0ab0b-67d3-4253-b417-b1bb67ee1618",
+  "prevId": "bc462c85-6bd8-46bd-bda1-4fb28105f244",
   "tables": {
     "auditlog": {
       "name": "auditlog",
@@ -386,18 +386,26 @@
           "notNull": true,
           "autoincrement": false
         },
+        "type": {
+          "name": "type",
+          "type": "enum('PERIODIC','PROKER')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PERIODIC'"
+        },
         "evaluatorRole": {
           "name": "evaluatorRole",
           "type": "enum('ADMIN','BPI','KADIV','ANGGOTA','KASUBDIV')",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "evaluateeRole": {
           "name": "evaluateeRole",
           "type": "enum('ADMIN','BPI','KADIV','ANGGOTA','KASUBDIV')",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "isActive": {

@@ -24,7 +24,7 @@ export default async function MonthlyRankPage({ searchParams }: PageProps) {
     if (!isSuperAdmin(session.role)) redirect("/dashboard");
 
     const [activePeriod, currentUser] = await Promise.all([
-        db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+        db.query.periods.findFirst({ where: eq(periods.isActive, 1), orderBy: [desc(periods.startYear)] }),
         session.userId
             ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } })
             : Promise.resolve(null),

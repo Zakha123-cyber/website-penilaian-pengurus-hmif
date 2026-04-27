@@ -60,15 +60,21 @@ const INDICATORS: { name: string; evaluatorRole: Role; evaluateeRole: Role }[] =
   { name: "Kontribusi dalam kegiatan", evaluatorRole: "ANGGOTA", evaluateeRole: "ANGGOTA" },
 ];
 
+const PROKER_INDICATORS = [
+  { name: "Kehadiran dan kedisiplinan selama kepanitiaan", type: "PROKER" as const },
+  { name: "Kerja sama dalam mensukseskan acara", type: "PROKER" as const },
+  { name: "Tanggung jawab terhadap jobdesk", type: "PROKER" as const },
+];
+
 const DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD ?? "JayalahHimpunanku123!";
 const DEFAULT_PERIOD = {
   name: "2025/2026",
   startYear: 2025,
   endYear: 2026,
-  isActive: true,
+  isActive: 1,
 };
 
-const DEFAULT_DIVISIONS = ["BPI", "PSDM", "Kewirausahaan","Mediatek","Humas","Litbang"];
+const DEFAULT_DIVISIONS = ["BPI", "PSDM", "Kewirausahaan", "Mediatek", "Humas", "Litbang"];
 
 const DEFAULT_USERS = [
   { nim: "18082018", name: "Super Admin", role: "ADMIN" as const, division: null },
@@ -89,14 +95,28 @@ async function seedIndicators() {
       });
     }
   }
-  console.log(`Seeded ${INDICATORS.length} indicators.`);
+  console.log(`Seeded ${INDICATORS.length} periodic indicators.`);
+
+  for (const ind of PROKER_INDICATORS) {
+    const existing = await db.query.indicators.findFirst({
+      where: eq(indicators.name, ind.name),
+    });
+    if (!existing) {
+      await db.insert(indicators).values({
+        id: crypto.randomUUID(),
+        name: ind.name,
+        type: ind.type,
+      });
+    }
+  }
+  console.log(`Seeded ${PROKER_INDICATORS.length} proker indicators.`);
 }
 
 const DEFAULT_SUBDIVISIONS: { name: string; division: string }[] = [
-  { name: "HUBLU",  division: "Humas"    },
-  { name: "KONTEN", division: "Humas"    },
-  { name: "MEDIA",  division: "Mediatek" },
-  { name: "TEKNO",  division: "Mediatek" },
+  { name: "HUBLU", division: "Humas" },
+  { name: "KONTEN", division: "Humas" },
+  { name: "MEDIA", division: "Mediatek" },
+  { name: "TEKNO", division: "Mediatek" },
 ];
 
 async function seedSubdivisions(divisionMap: Record<string, string>) {
@@ -298,7 +318,7 @@ async function seedUsers(periodId: string, divisionMap: Record<string, string>) 
       const userData = {
         name: u.name,
         role: u.role,
-        isActive: true,
+        isActive: 1,
         periodId,
         divisionId: u.division ? divisionMap[u.division] : null,
         passwordHash: hash,

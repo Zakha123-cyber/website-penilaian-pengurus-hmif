@@ -4,7 +4,7 @@ import {
   evaluations,
   panitia,
 } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 type EventRow = {
   id: string;
@@ -26,7 +26,7 @@ async function generatePeriodicAssignments(eventId: string, periodId: string) {
   const allUsers = await db
     .select({ id: users.id, role: users.role, divisionId: users.divisionId, subdivisionId: users.subdivisionId })
     .from(users)
-    .where(and(eq(users.periodId, periodId), eq(users.isActive, true)));
+    .where(and(eq(users.periodId, periodId), eq(users.isActive, 1)));
 
   const bpi = allUsers.filter((u) => u.role === "BPI");
   const kadiv = allUsers.filter((u) => u.role === "KADIV");
@@ -68,7 +68,7 @@ async function generatePeriodicAssignments(eventId: string, periodId: string) {
 
   if (pairs.length > 0) {
     for (let i = 0; i < pairs.length; i += 100) {
-      await db.insert(evaluations).values(pairs.slice(i, i + 100)).onConflictDoNothing();
+      await db.insert(evaluations).values(pairs.slice(i, i + 100)).onDuplicateKeyUpdate({ set: { id: sql`id` } });
     }
   }
 
@@ -85,7 +85,7 @@ async function generateProkerAssignments(eventId: string, prokerId: string, _per
 
   console.log(`[Assignment Generator] PROKER event ${eventId}: Found ${panitiaRows.length} total panitia for proker ${prokerId}`);
 
-  const activeUsers = panitiaRows.filter((p) => p.user.isActive).map((p) => p.user);
+  const activeUsers = panitiaRows.filter((p) => p.user.isActive === 1).map((p) => p.user);
 
   console.log(`[Assignment Generator] PROKER event ${eventId}: ${activeUsers.length} active users after filtering`);
   if (activeUsers.length > 0) {
@@ -110,7 +110,7 @@ async function generateProkerAssignments(eventId: string, prokerId: string, _per
 
   if (pairs.length > 0) {
     for (let i = 0; i < pairs.length; i += 100) {
-      await db.insert(evaluations).values(pairs.slice(i, i + 100)).onConflictDoNothing();
+      await db.insert(evaluations).values(pairs.slice(i, i + 100)).onDuplicateKeyUpdate({ set: { id: sql`id` } });
     }
   }
 

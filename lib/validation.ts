@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+// Helper: converts boolean/truthy input to 0|1 for MySQL tinyint columns
+const tinyBool = (defaultVal: 0 | 1) =>
+  z.coerce
+    .boolean()
+    .optional()
+    .default(defaultVal === 1)
+    .transform((v) => (v ? 1 : 0) as 0 | 1);
+
 export const loginSchema = z.object({
   nim: z.string().min(3),
   password: z.string().min(6),
@@ -15,7 +23,7 @@ export const createPeriodSchema = z
     name: z.string().min(1, "Nama wajib diisi"),
     startYear: z.coerce.number().int(),
     endYear: z.coerce.number().int(),
-    isActive: z.coerce.boolean().optional().default(false),
+    isActive: tinyBool(0),
   })
   .refine((data) => data.startYear <= data.endYear, {
     message: "Tahun mulai harus lebih kecil atau sama dengan tahun akhir",
@@ -48,7 +56,7 @@ export const createUserSchema = z.object({
     .or(z.literal(""))
     .transform((v) => (v === "" || v === undefined ? null : v)),
   password: z.string().min(6),
-  isActive: z.coerce.boolean().optional().default(true),
+  isActive: tinyBool(1),
 });
 
 export const updateUserSchema = z.object({
@@ -80,7 +88,7 @@ export const updateUserSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => (v === "" || v === undefined ? undefined : v)),
-  isActive: z.coerce.boolean().optional().default(true),
+  isActive: tinyBool(1),
 });
 
 export const createDivisionSchema = z.object({
@@ -103,17 +111,16 @@ const hierarchyRoleEnum = z.enum(["BPI", "KADIV", "KASUBDIV", "ANGGOTA"]);
 
 export const createIndicatorSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
-  evaluatorRole: hierarchyRoleEnum,
-  evaluateeRole: hierarchyRoleEnum,
-  isActive: z.coerce.boolean().optional().default(true),
+  type: z.enum(["PERIODIC", "PROKER"]).default("PERIODIC"),
+  evaluatorRole: hierarchyRoleEnum.nullable().optional().or(z.literal("")).transform(v => v === "" ? null : v),
+  evaluateeRole: hierarchyRoleEnum.nullable().optional().or(z.literal("")).transform(v => v === "" ? null : v),
+  isActive: tinyBool(1),
+}).refine(data => data.type === "PROKER" || (data.evaluatorRole && data.evaluateeRole), {
+  message: "Hierarki peran wajib diisi untuk indikator periodik",
+  path: ["evaluatorRole"]
 });
 
-export const updateIndicatorSchema = z.object({
-  name: z.string().min(1, "Nama wajib diisi"),
-  evaluatorRole: hierarchyRoleEnum,
-  evaluateeRole: hierarchyRoleEnum,
-  isActive: z.coerce.boolean().optional().default(true),
-});
+export const updateIndicatorSchema = createIndicatorSchema;
 
 export const createEventSchema = z
   .object({
@@ -123,7 +130,7 @@ export const createEventSchema = z
     prokerId: z.string().optional().nullable(),
     startDate: z.coerce.date(),
     endDate: z.coerce.date(),
-    isOpen: z.coerce.boolean().optional().default(true),
+    isOpen: tinyBool(1),
     indicatorIds: z.array(z.string().min(1)).min(1, "Pilih minimal 1 indikator"),
   })
   .refine((data) => (data.type === "PROKER" ? !!data.prokerId : true), {
@@ -133,7 +140,7 @@ export const createEventSchema = z
 
 export const updateEventSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
-  isOpen: z.coerce.boolean().optional(),
+  isOpen: tinyBool(1),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
 });

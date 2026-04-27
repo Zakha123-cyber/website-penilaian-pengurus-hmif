@@ -16,7 +16,7 @@ export async function logAudit(entry: AuditPayload) {
       id: crypto.randomUUID(),
       action: entry.action,
       userId: entry.userId ?? null,
-      success: entry.success,
+      success: entry.success ? 1 : 0,
       ip: entry.ip ?? null,
       userAgent: entry.userAgent ?? null,
       metadata: entry.metadata ?? null,

@@ -26,7 +26,7 @@ export default async function ResultsPage({ searchParams }: PageProps) {
 
   const [events, activePeriod, currentUser] = await Promise.all([
     db.select({ id: evaluationEvents.id, name: evaluationEvents.name }).from(evaluationEvents).orderBy(desc(evaluationEvents.startDate)),
-    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findFirst({ where: eq(periods.isActive, 1), orderBy: [desc(periods.startYear)] }),
     session.userId ? db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { name: true, email: true } }) : Promise.resolve(null),
   ]);
 

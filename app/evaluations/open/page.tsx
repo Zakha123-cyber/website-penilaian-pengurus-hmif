@@ -18,7 +18,7 @@ export default async function OpenEventsPage() {
     // Fetch open events where this user has at least one evaluation assignment
     const openEvents = await db.query.evaluationEvents.findMany({
         where: and(
-            eq(evaluationEvents.isOpen, true),
+            eq(evaluationEvents.isOpen, 1),
             lte(evaluationEvents.startDate, now),
             gte(evaluationEvents.endDate, now)
         ),

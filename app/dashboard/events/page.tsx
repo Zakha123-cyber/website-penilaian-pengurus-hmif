@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Info, Trash2 } from "lucide-react";
 
 import { ConfirmForm } from "@/components/confirm-form";
+import { EventForm } from "@/components/event-form";
 import { SidebarShell } from "@/components/sidebar-shell";
 import { SiteHeader } from "@/components/site-header";
 import { SuccessAlert } from "@/components/success-alert";
@@ -49,7 +50,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
         prokerId: formData.get("prokerId") ? String(formData.get("prokerId")) : null,
         startDate: formData.get("startDate"),
         endDate: formData.get("endDate"),
-        isOpen: formData.get("isOpen") === "on",
+        isOpen: formData.get("isOpen") === "on" ? 1 : 0,
         indicatorIds: Array.isArray(formData.getAll("indicatorIds")) ? formData.getAll("indicatorIds").map(String) : [],
       };
 
@@ -107,7 +108,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
         name: String(formData.get("name") ?? ""),
         startDate: formData.get("startDate"),
         endDate: formData.get("endDate"),
-        isOpen: formData.get("isOpen") === "on",
+        isOpen: formData.get("isOpen") === "on" ? 1 : 0,
       };
       const parsed = updateEventSchema.safeParse(raw);
       if (!parsed.success) throw new Error("Input tidak valid");
@@ -166,14 +167,14 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   }
 
   const [activePeriod, periodsData, prokersData, indicatorsData, eventsData, currentUser] = await Promise.all([
-    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findFirst({ where: eq(periods.isActive, 1), orderBy: [desc(periods.startYear)] }),
     db.query.periods.findMany({ orderBy: [desc(periods.startYear)] }),
     db.query.prokers.findMany({
       orderBy: [asc(prokers.name)],
       with: { period: true }
     }),
     db.query.indicators.findMany({
-      where: eq(indicators.isActive, true),
+      where: eq(indicators.isActive, 1),
       orderBy: [asc(indicators.name)]
     }),
     db.query.evaluationEvents.findMany({
@@ -205,7 +206,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   const alertType = (params?.alert as "success" | "error" | "info") ?? (error ? "error" : "success");
 
   const totalEvents = eventsData.length;
-  const openEvents = eventsData.filter((e) => e.isOpen).length;
+  const openEvents = eventsData.filter((e) => e.isOpen === 1).length;
   const prokerEvents = eventsData.filter((e) => e.type === "PROKER").length;
   const periodicEvents = totalEvents - prokerEvents;
 
@@ -236,102 +237,12 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                   <SheetDescription>Buat event baru dengan indikator snapshot dan jadwal penilaian.</SheetDescription>
                 </SheetHeader>
                 <div className="flex-1 overflow-y-auto">
-                  <form action={createEvent} className="grid gap-3 p-4 pt-0">
-                    <label className="text-sm font-medium text-foreground">
-                      Nama
-                      <Input name="name" placeholder="Evaluasi Tengah Periode" required className="mt-1" />
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Tipe
-                      <select name="type" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {eventTypes.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Periode
-                      <select name="periodId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        {periodsData.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-sm font-medium text-foreground">
-                      Proker (khusus tipe Proker)
-                      <select name="prokerId" className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm">
-                        <option value="">(Kosongkan jika periodik)</option>
-                        {prokersData.map((pr) => (
-                          <option key={pr.id} value={pr.id}>
-                            {pr.name} · {pr.period.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="text-sm font-medium text-foreground">
-                        Mulai
-                        <Input name="startDate" type="date" required className="mt-1" />
-                      </label>
-                      <label className="text-sm font-medium text-foreground">
-                        Selesai
-                        <Input name="endDate" type="date" required className="mt-1" />
-                      </label>
-                    </div>
-                    <div className="space-y-3 rounded-lg border border-border/60 bg-card/40 p-3">
-                      <p className="text-sm font-semibold text-foreground">Pilih indikator</p>
-                      {(() => {
-                        const ROLE_LABELS: Record<string, string> = { BPI: "BPI", KADIV: "Kepala Divisi", KASUBDIV: "Kepala Sub Divisi", ANGGOTA: "Anggota" };
-                        const PAIRS = [
-                          { evaluatorRole: "BPI", evaluateeRole: "KADIV" },
-                          { evaluatorRole: "BPI", evaluateeRole: "KASUBDIV" },
-                          { evaluatorRole: "KADIV", evaluateeRole: "BPI" },
-                          { evaluatorRole: "KADIV", evaluateeRole: "KASUBDIV" },
-                          { evaluatorRole: "KADIV", evaluateeRole: "ANGGOTA" },
-                          { evaluatorRole: "KASUBDIV", evaluateeRole: "KADIV" },
-                          { evaluatorRole: "KASUBDIV", evaluateeRole: "ANGGOTA" },
-                          { evaluatorRole: "ANGGOTA", evaluateeRole: "BPI" },
-                          { evaluatorRole: "ANGGOTA", evaluateeRole: "KADIV" },
-                          { evaluatorRole: "ANGGOTA", evaluateeRole: "KASUBDIV" },
-                          { evaluatorRole: "ANGGOTA", evaluateeRole: "ANGGOTA" },
-                        ];
-                        return PAIRS.map(({ evaluatorRole, evaluateeRole }) => {
-                          const group = indicatorsData.filter(
-                            (ind) => ind.evaluatorRole === evaluatorRole && ind.evaluateeRole === evaluateeRole
-                          );
-                          return (
-                            <div key={`${evaluatorRole}-${evaluateeRole}`} className="space-y-1.5">
-                              <p className="text-xs font-semibold text-muted-foreground">
-                                {ROLE_LABELS[evaluatorRole]} → {ROLE_LABELS[evaluateeRole]}
-                              </p>
-                              {group.length === 0 && (
-                                <p className="text-xs text-muted-foreground italic pl-1">Tidak ada indikator.</p>
-                              )}
-                              <div className="grid gap-1.5 sm:grid-cols-2">
-                                {group.map((ind) => (
-                                  <label key={ind.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
-                                    <input name="indicatorIds" value={ind.id} type="checkbox" className="h-4 w-4 rounded border-border" />
-                                    <span>{ind.name}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                    <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                      <input name="isOpen" type="checkbox" defaultChecked className="h-4 w-4 rounded border-border" />
-                      Buka segera
-                    </label>
-                    <Button type="submit" className="mt-1">
-                      Simpan
-                    </Button>
-                  </form>
+                  <EventForm
+                    action={createEvent}
+                    periodsData={periodsData as any[]}
+                    prokersData={prokersData as any[]}
+                    indicatorsData={indicatorsData as any[]}
+                  />
                 </div>
               </SheetContent>
             </Sheet>
@@ -397,7 +308,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                             {new Date(ev.startDate).toLocaleDateString()} - {new Date(ev.endDate).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={ev.isOpen ? "default" : "outline"}>{ev.isOpen ? "Dibuka" : "Ditutup"}</Badge>
+                            <Badge variant={ev.isOpen === 1 ? "default" : "outline"}>{ev.isOpen === 1 ? "Dibuka" : "Ditutup"}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{ev.indicators.length} indikator</Badge>
@@ -433,7 +344,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                                         </label>
                                       </div>
                                       <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
-                                        <input name="isOpen" type="checkbox" defaultChecked={ev.isOpen} className="h-4 w-4 rounded border-border" />
+                                        <input name="isOpen" type="checkbox" defaultChecked={ev.isOpen === 1} className="h-4 w-4 rounded border-border" />
                                         Buka
                                       </label>
                                       <Button type="submit" className="mt-1">

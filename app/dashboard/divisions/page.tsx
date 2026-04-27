@@ -73,7 +73,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
   }
 
   const [activePeriod, rawDivisions, currentUser] = await Promise.all([
-    db.query.periods.findFirst({ where: eq(periods.isActive, true), orderBy: [desc(periods.startYear)] }),
+    db.query.periods.findFirst({ where: eq(periods.isActive, 1), orderBy: [desc(periods.startYear)] }),
     db.query.divisions.findMany({
       orderBy: [asc(divisions.name)],
       with: {

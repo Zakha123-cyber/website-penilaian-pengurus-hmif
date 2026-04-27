@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const { name, startYear, endYear, isActive } = parsed.data;
 
   if (isActive) {
-    await db.update(periods).set({ isActive: false });
+    await db.update(periods).set({ isActive: 0 });
   }
 
   const id = crypto.randomUUID();
@@ -46,9 +46,9 @@ export async function POST(request: Request) {
     name,
     startYear,
     endYear,
-    isActive: !!isActive,
+    isActive: isActive ? 1 : 0,
     createdAt: new Date(),
   });
 
-  return NextResponse.json({ period: { id, name, startYear, endYear, isActive: !!isActive } }, { status: 201 });
+  return NextResponse.json({ period: { id, name, startYear, endYear, isActive: isActive ? 1 : 0 } }, { status: 201 });
 }

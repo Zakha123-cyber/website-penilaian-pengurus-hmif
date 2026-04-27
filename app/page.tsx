@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 type State = {
   nim: string;
@@ -13,6 +14,7 @@ type State = {
 export default function Home() {
   const [state, setState] = useState<State>({ nim: "", password: "", loading: false, error: null });
   const [showSplash, setShowSplash] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1200);
@@ -113,18 +115,27 @@ export default function Home() {
                   placeholder="Contoh: 135xxxx"
                 />
               </label>
-              <label className="flex flex-col gap-2 text-sm text-white/80">
+              <div className="flex flex-col gap-2 text-sm text-white/80">
                 <span>Password</span>
-                <input
-                  type="password"
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none ring-0 transition focus:border-cyan-300/70 focus:bg-white/10"
-                  value={state.password}
-                  onChange={(e) => setState((s) => ({ ...s, password: e.target.value }))}
-                  required
-                  minLength={6}
-                  placeholder="Minimal 6 karakter"
-                />
-              </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 pr-10 text-sm text-white placeholder:text-white/40 outline-none ring-0 transition focus:border-cyan-300/70 focus:bg-white/10"
+                    value={state.password}
+                    onChange={(e) => setState((s) => ({ ...s, password: e.target.value }))}
+                    required
+                    minLength={6}
+                    placeholder="Minimal 6 karakter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-white/60 hover:text-white/80"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
               {state.error ? <p className="text-sm text-amber-200">{state.error}</p> : null}
               <button
                 type="submit"

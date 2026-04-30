@@ -21,8 +21,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   await db.update(indicators).set({
     name: parsed.data.name,
-    evaluatorRole: parsed.data.evaluatorRole,
-    evaluateeRole: parsed.data.evaluateeRole,
+    eventType: parsed.data.eventType,
+    evaluatorRole: parsed.data.evaluatorRole ?? null,
+    evaluateeRole: parsed.data.evaluateeRole ?? null,
     isActive: parsed.data.isActive,
   }).where(eq(indicators.id, id));
   const [indicator] = await db.select().from(indicators).where(eq(indicators.id, id));

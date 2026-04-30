@@ -92,8 +92,9 @@ export const evaluationEvents = pgTable("evaluationevent", {
 export const indicators = pgTable("indicator", {
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    evaluatorRole: roleEnum("evaluatorRole").notNull(),
-    evaluateeRole: roleEnum("evaluateeRole").notNull(),
+    eventType: eventTypeEnum("eventType").notNull(),
+    evaluatorRole: roleEnum("evaluatorRole"),
+    evaluateeRole: roleEnum("evaluateeRole"),
     isActive: boolean("isActive").notNull().default(true),
     createdAt: timestamp("createdAt", { mode: "date", withTimezone: true }).notNull().defaultNow(),
 });

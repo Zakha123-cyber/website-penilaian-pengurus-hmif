@@ -115,11 +115,12 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
               <SheetTrigger asChild>
                 <Button>Tambah Divisi</Button>
               </SheetTrigger>
-              <SheetContent side="right" className="sm:max-w-md">
+              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                 <SheetHeader>
                   <SheetTitle>Tambah Divisi</SheetTitle>
                   <SheetDescription>Masukkan nama divisi baru.</SheetDescription>
                 </SheetHeader>
+                <div className="flex-1 overflow-y-auto">
                 <form action={createDivision} className="grid gap-3 p-4 pt-0">
                   <label className="text-sm font-medium text-foreground">
                     Nama
@@ -129,6 +130,7 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
                     Simpan
                   </Button>
                 </form>
+                </div>
               </SheetContent>
             </Sheet>
           </div>
@@ -189,21 +191,23 @@ export default async function DivisionsPage({ searchParams }: DivisionsPageProps
                                   <Pencil className="h-4 w-4" />
                                 </Button>
                               </SheetTrigger>
-                              <SheetContent side="right" className="sm:max-w-md">
+                              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                                 <SheetHeader>
                                   <SheetTitle>Edit Divisi</SheetTitle>
                                   <SheetDescription>Perbarui nama divisi.</SheetDescription>
                                 </SheetHeader>
-                                <form action={updateDivision} className="grid gap-3 p-4 pt-0">
-                                  <input type="hidden" name="id" value={division.id} />
-                                  <label className="text-sm font-medium text-foreground">
-                                    Nama
-                                    <Input name="name" defaultValue={division.name} required className="mt-1" />
-                                  </label>
-                                  <Button type="submit" className="mt-2">
-                                    Simpan
-                                  </Button>
-                                </form>
+                                <div className="flex-1 overflow-y-auto">
+                                  <form action={updateDivision} className="grid gap-3 p-4 pt-0">
+                                    <input type="hidden" name="id" value={division.id} />
+                                    <label className="text-sm font-medium text-foreground">
+                                      Nama
+                                      <Input name="name" defaultValue={division.name} required className="mt-1" />
+                                    </label>
+                                    <Button type="submit" className="mt-2">
+                                      Simpan
+                                    </Button>
+                                  </form>
+                                </div>
                               </SheetContent>
                             </Sheet>
 

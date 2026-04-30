@@ -4,9 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-// 11 kombinasi valid berdasarkan assignment generator
 const VALID_PAIRS: Record<string, string[]> = {
-  BPI:      ["KADIV", "KASUBDIV"],
+  BPI:      ["BPI", "KADIV", "KASUBDIV"],
   KADIV:    ["BPI", "KASUBDIV", "ANGGOTA"],
   KASUBDIV: ["KADIV", "ANGGOTA"],
   ANGGOTA:  ["BPI", "KADIV", "KASUBDIV", "ANGGOTA"],
@@ -26,6 +25,7 @@ type IndicatorFormProps = {
   defaultValues?: {
     id?: string;
     name?: string;
+    eventType?: string;
     evaluatorRole?: string;
     evaluateeRole?: string;
     isActive?: boolean;
@@ -34,7 +34,9 @@ type IndicatorFormProps = {
 };
 
 export function IndicatorForm({ action, defaultValues, submitLabel = "Simpan" }: IndicatorFormProps) {
+  const [eventType, setEventType] = useState(defaultValues?.eventType ?? "PERIODIC");
   const [evaluatorRole, setEvaluatorRole] = useState(defaultValues?.evaluatorRole ?? "ANGGOTA");
+
   const validEvaluatees = VALID_PAIRS[evaluatorRole] ?? [];
   const defaultEvaluatee = validEvaluatees.includes(defaultValues?.evaluateeRole ?? "")
     ? defaultValues!.evaluateeRole!
@@ -48,6 +50,8 @@ export function IndicatorForm({ action, defaultValues, submitLabel = "Simpan" }:
     setEvaluateeRole(newValid[0] ?? "");
   };
 
+  const isPeriodic = eventType === "PERIODIC";
+
   return (
     <form action={action} className="grid gap-3 p-4 pt-0">
       {defaultValues?.id && <input type="hidden" name="id" value={defaultValues.id} />}
@@ -57,41 +61,62 @@ export function IndicatorForm({ action, defaultValues, submitLabel = "Simpan" }:
         <Input name="name" defaultValue={defaultValues?.name} placeholder="Contoh: Kedisiplinan" required className="mt-1" />
       </label>
 
-      <div className="rounded-lg border border-border/60 bg-muted/30 p-3 grid gap-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Hierarki Penilaian</p>
+      <label className="text-sm font-medium text-foreground">
+        Tipe Event
+        <select
+          name="eventType"
+          value={eventType}
+          onChange={(e) => setEventType(e.target.value)}
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+        >
+          <option value="PERIODIC">Periodik</option>
+          <option value="PROKER">Proker</option>
+        </select>
+      </label>
 
-        <label className="text-sm font-medium text-foreground">
-          Penilai (Evaluator)
-          <select
-            name="evaluatorRole"
-            value={evaluatorRole}
-            onChange={handleEvaluatorChange}
-            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
-          >
-            {EVALUATOR_ROLES.map((r) => (
-              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-            ))}
-          </select>
-        </label>
+      {isPeriodic && (
+        <div className="rounded-lg border border-border/60 bg-muted/30 p-3 grid gap-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Hierarki Penilaian</p>
 
-        <label className="text-sm font-medium text-foreground">
-          Yang Dinilai (Evaluatee)
-          <select
-            name="evaluateeRole"
-            value={evaluateeRole}
-            onChange={(e) => setEvaluateeRole(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
-          >
-            {validEvaluatees.map((r) => (
-              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-            ))}
-          </select>
-        </label>
+          <label className="text-sm font-medium text-foreground">
+            Penilai (Evaluator)
+            <select
+              name="evaluatorRole"
+              value={evaluatorRole}
+              onChange={handleEvaluatorChange}
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              {EVALUATOR_ROLES.map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </select>
+          </label>
 
-        <p className="text-xs text-muted-foreground">
-          Indikator ini akan muncul saat <strong>{ROLE_LABELS[evaluatorRole]}</strong> menilai <strong>{ROLE_LABELS[evaluateeRole] ?? "-"}</strong>.
+          <label className="text-sm font-medium text-foreground">
+            Yang Dinilai (Evaluatee)
+            <select
+              name="evaluateeRole"
+              value={evaluateeRole}
+              onChange={(e) => setEvaluateeRole(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              {validEvaluatees.map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </select>
+          </label>
+
+          <p className="text-xs text-muted-foreground">
+            Indikator ini muncul saat <strong>{ROLE_LABELS[evaluatorRole]}</strong> menilai <strong>{ROLE_LABELS[evaluateeRole] ?? "-"}</strong>.
+          </p>
+        </div>
+      )}
+
+      {!isPeriodic && (
+        <p className="text-xs text-muted-foreground rounded-lg border border-border/40 bg-muted/20 px-3 py-2">
+          Indikator proker bersifat general — berlaku untuk semua pasangan penilai dalam event proker.
         </p>
-      </div>
+      )}
 
       <label className="mt-1 flex items-center gap-2 text-sm text-foreground">
         <input name="isActive" type="checkbox" defaultChecked={defaultValues?.isActive ?? true} className="h-4 w-4 rounded border-border" />

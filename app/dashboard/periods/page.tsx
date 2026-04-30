@@ -128,11 +128,12 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
               <SheetTrigger asChild>
                 <Button>Tambah Periode</Button>
               </SheetTrigger>
-              <SheetContent side="right" className="sm:max-w-md">
+              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                 <SheetHeader>
                   <SheetTitle>Tambah Periode</SheetTitle>
                   <SheetDescription>Masukkan rentang tahun dan status aktif.</SheetDescription>
                 </SheetHeader>
+                <div className="flex-1 overflow-y-auto">
                 <form action={createPeriod} className="grid gap-3 p-4 pt-0">
                   <label className="text-sm font-medium text-foreground">
                     Nama
@@ -154,6 +155,7 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
                     Simpan
                   </Button>
                 </form>
+                </div>
               </SheetContent>
             </Sheet>
           </div>
@@ -218,11 +220,12 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
                                   <Pencil className="h-4 w-4" />
                                 </Button>
                               </SheetTrigger>
-                              <SheetContent side="right" className="sm:max-w-md">
+                              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                                 <SheetHeader>
                                   <SheetTitle>Edit Periode</SheetTitle>
                                   <SheetDescription>Perbarui nama, rentang tahun, atau status aktif.</SheetDescription>
                                 </SheetHeader>
+                                <div className="flex-1 overflow-y-auto">
                                 <form action={updatePeriod} className="grid gap-3 p-4 pt-0">
                                   <input type="hidden" name="id" value={period.id} />
                                   <label className="text-sm font-medium text-foreground">
@@ -245,6 +248,7 @@ export default async function PeriodsPage({ searchParams }: PeriodsPageProps) {
                                     Simpan
                                   </Button>
                                 </form>
+                                </div>
                               </SheetContent>
                             </Sheet>
 

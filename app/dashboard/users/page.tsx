@@ -224,17 +224,19 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                 <SheetTrigger asChild>
                   <Button>Tambah User</Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="sm:max-w-md">
+                <SheetContent side="right" className="sm:max-w-md flex flex-col">
                   <SheetHeader>
                     <SheetTitle>Tambah User</SheetTitle>
                     <SheetDescription>Masukkan data user baru.</SheetDescription>
                   </SheetHeader>
-                  <UserForm
-                    action={createUser}
-                    divisions={divisionsData}
-                    subdivisions={subdivisionsData}
-                    periods={periodsData}
-                  />
+                  <div className="flex-1 overflow-y-auto">
+                    <UserForm
+                      action={createUser}
+                      divisions={divisionsData}
+                      subdivisions={subdivisionsData}
+                      periods={periodsData}
+                    />
+                  </div>
                 </SheetContent>
               </Sheet>
             </div>
@@ -326,11 +328,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                   <Info className="h-4 w-4" />
                                 </Button>
                               </SheetTrigger>
-                              <SheetContent side="right" className="sm:max-w-md">
+                              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                                 <SheetHeader>
                                   <SheetTitle>Detail User</SheetTitle>
                                   <SheetDescription>Informasi akun dan kredensial.</SheetDescription>
                                 </SheetHeader>
+                                <div className="flex-1 overflow-y-auto">
                                 <div className="space-y-3 p-4 pt-0 text-sm">
                                   <div>
                                     <p className="text-muted-foreground">Nama</p>
@@ -376,6 +379,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                     <p>Password: tidak dapat ditampilkan (tersimpan aman)</p>
                                   </div>
                                 </div>
+                                </div>
                               </SheetContent>
                             </Sheet>
 
@@ -385,29 +389,31 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                                   <Pencil className="h-4 w-4" />
                                 </Button>
                               </SheetTrigger>
-                              <SheetContent side="right" className="sm:max-w-md">
+                              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                                 <SheetHeader>
                                   <SheetTitle>Edit User</SheetTitle>
                                   <SheetDescription>Perbarui data user. Kosongkan password jika tidak diubah.</SheetDescription>
                                 </SheetHeader>
-                                <UserForm
-                                  action={updateUser}
-                                  divisions={divisionsData}
-                                  subdivisions={subdivisionsData}
-                                  periods={periodsData}
-                                  defaultValues={{
-                                    id: user.id,
-                                    name: user.name,
-                                    nim: user.nim,
-                                    email: user.email ?? "",
-                                    role: user.role,
-                                    periodId: user.periodId,
-                                    divisionId: user.divisionId ?? "",
-                                    subdivisionId: user.subdivisionId ?? "",
-                                    isActive: user.isActive,
-                                  }}
-                                  showPassword
-                                />
+                                <div className="flex-1 overflow-y-auto">
+                                  <UserForm
+                                    action={updateUser}
+                                    divisions={divisionsData}
+                                    subdivisions={subdivisionsData}
+                                    periods={periodsData}
+                                    defaultValues={{
+                                      id: user.id,
+                                      name: user.name,
+                                      nim: user.nim,
+                                      email: user.email ?? "",
+                                      role: user.role,
+                                      periodId: user.periodId,
+                                      divisionId: user.divisionId ?? "",
+                                      subdivisionId: user.subdivisionId ?? "",
+                                      isActive: user.isActive,
+                                    }}
+                                    showPassword
+                                  />
+                                </div>
                               </SheetContent>
                             </Sheet>
 

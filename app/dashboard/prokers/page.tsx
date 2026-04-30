@@ -188,11 +188,12 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
               <SheetTrigger asChild>
                 <Button>Tambah Proker</Button>
               </SheetTrigger>
-              <SheetContent side="right" className="sm:max-w-md">
+              <SheetContent side="right" className="sm:max-w-md flex flex-col">
                 <SheetHeader>
                   <SheetTitle>Tambah Proker</SheetTitle>
                   <SheetDescription>Masukkan nama, divisi, dan periode proker.</SheetDescription>
                 </SheetHeader>
+                <div className="flex-1 overflow-y-auto">
                 <form action={createProker} className="grid gap-3 p-4 pt-0">
                   <label className="text-sm font-medium text-foreground">
                     Nama
@@ -222,6 +223,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                     Simpan
                   </Button>
                 </form>
+                </div>
               </SheetContent>
             </Sheet>
           </div>
@@ -289,11 +291,12 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                                     <Pencil className="h-4 w-4" />
                                   </Button>
                                 </SheetTrigger>
-                                <SheetContent side="right" className="sm:max-w-xl">
+                                <SheetContent side="right" className="sm:max-w-xl flex flex-col">
                                   <SheetHeader>
                                     <SheetTitle>Edit Proker</SheetTitle>
                                     <SheetDescription>Perbarui detail proker dan susunan panitia.</SheetDescription>
                                   </SheetHeader>
+                                  <div className="flex-1 overflow-y-auto">
                                   <div className="grid gap-4 p-4 pt-0">
                                     <form action={updateProker} className="grid gap-3 rounded-lg border border-border/60 bg-card/40 p-3">
                                       <input type="hidden" name="id" value={proker.id} />
@@ -363,6 +366,7 @@ export default async function ProkersPage({ searchParams }: ProkersPageProps) {
                                         {proker.panitia.length === 0 && <div className="rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">Belum ada panitia.</div>}
                                       </div>
                                     </div>
+                                  </div>
                                   </div>
                                 </SheetContent>
                               </Sheet>

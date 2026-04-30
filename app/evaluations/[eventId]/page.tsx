@@ -60,7 +60,10 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
         where: inArray(evaluations.id, pendingActionIds),
         with: {
           evaluatee: { columns: { role: true } },
-          event: { with: { indicators: { with: { indicator: { columns: { evaluatorRole: true, evaluateeRole: true } } } } } },
+          event: {
+            columns: { isOpen: true, startDate: true, endDate: true, type: true },
+            with: { indicators: { with: { indicator: { columns: { evaluatorRole: true, evaluateeRole: true } } } } },
+          },
         },
       })
       : [];
@@ -102,16 +105,22 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
       columns: { role: true },
     });
     const evaluatorRoleForAction = evaluatorUser?.role ?? "ANGGOTA";
+    const isPeriodicEvent = eventData?.type === "PERIODIC";
 
     for (const evaluation of allPendingEvaluations) {
       const feedback = String(formData.get(`feedback-${evaluation.id}`) ?? "");
-      const evaluateeRole = (evaluation as any).evaluatee?.role ?? "ANGGOTA";
-      // Only score indicators matching this evaluator→evaluatee role pair
-      const relevantSnaps = (evaluation.event.indicators as any[]).filter(
-        (snap) =>
-          snap.indicator?.evaluatorRole === evaluatorRoleForAction &&
-          snap.indicator?.evaluateeRole === evaluateeRole
-      );
+      const allSnaps = evaluation.event.indicators as any[];
+
+      // PROKER: semua indikator berlaku (evaluatorRole/evaluateeRole null)
+      // PERIODIC: filter berdasarkan pasangan role
+      const relevantSnaps = isPeriodicEvent
+        ? allSnaps.filter(
+            (snap) =>
+              snap.indicator?.evaluatorRole === evaluatorRoleForAction &&
+              snap.indicator?.evaluateeRole === ((evaluation as any).evaluatee?.role ?? "ANGGOTA")
+          )
+        : allSnaps;
+
       const scores = relevantSnaps.map((snap: any) => ({
         indicatorSnapshotId: snap.id,
         score: Number(formData.get(`score-${evaluation.id}-${snap.id}`)),
@@ -166,7 +175,7 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
       with: {
         period: { columns: { name: true } },
         proker: { columns: { name: true } },
-        indicators: { with: { indicator: { columns: { name: true, evaluatorRole: true, evaluateeRole: true } } } },
+        indicators: { with: { indicator: { columns: { name: true, evaluatorRole: true, evaluateeRole: true, eventType: true } } } },
       },
     }),
     db
@@ -250,15 +259,22 @@ export default async function EventEvaluationsPage({ params, searchParams }: Pag
   );
 
   const evaluatorRole = evaluatorData?.role ?? "ANGGOTA";
+  const isPeriodic = eventData.type === "PERIODIC";
 
-  // Serialize pending data for client component — filter indicators by role pair
+  // Serialize pending data for client component
+  // PERIODIC: filter indikator berdasarkan pasangan evaluator→evaluatee role
+  // PROKER: tampilkan semua indikator (evaluatorRole/evaluateeRole null)
   const pendingForClient = pendingEvals.map((ev: any) => {
     const evaluateeRole = ev.evaluatee.role;
-    const filteredIndicators = (ev.event.indicators ?? []).filter(
-      (snap: any) =>
-        snap.indicator?.evaluatorRole === evaluatorRole &&
-        snap.indicator?.evaluateeRole === evaluateeRole
-    );
+    const allSnaps = ev.event.indicators ?? [];
+    const filteredIndicators = isPeriodic
+      ? allSnaps.filter(
+          (snap: any) =>
+            snap.indicator?.evaluatorRole === evaluatorRole &&
+            snap.indicator?.evaluateeRole === evaluateeRole
+        )
+      : allSnaps;
+
     return {
       id: ev.id,
       evaluatee: {

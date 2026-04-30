@@ -4,17 +4,20 @@ import { indicators } from "@/lib/schema";
 import { getSession } from "@/lib/auth";
 import { canManageRoles } from "@/lib/permissions";
 import { createIndicatorSchema } from "@/lib/validation";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   if (!canManageRoles(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const result = await db
-    .select()
-    .from(indicators)
-    .orderBy(asc(indicators.name));
+  const { searchParams } = new URL(request.url);
+  const eventType = searchParams.get("eventType") as "PERIODIC" | "PROKER" | null;
+
+  const query = db.select().from(indicators).$dynamic();
+  const result = await (eventType
+    ? query.where(eq(indicators.eventType, eventType)).orderBy(asc(indicators.name))
+    : query.orderBy(asc(indicators.name)));
 
   return NextResponse.json({ indicators: result });
 }
@@ -34,8 +37,9 @@ export async function POST(request: Request) {
   await db.insert(indicators).values({
     id,
     name: parsed.data.name,
-    evaluatorRole: parsed.data.evaluatorRole,
-    evaluateeRole: parsed.data.evaluateeRole,
+    eventType: parsed.data.eventType,
+    evaluatorRole: parsed.data.evaluatorRole ?? null,
+    evaluateeRole: parsed.data.evaluateeRole ?? null,
     isActive: parsed.data.isActive ?? true,
     createdAt: new Date(),
   });

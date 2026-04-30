@@ -42,8 +42,9 @@ async function generatePeriodicAssignments(eventId: string, periodId: string) {
 
   for (const ev of allUsers) {
     if (ev.role === "BPI") {
-      // BPI menilai semua KADIV dan KASUBDIV
-      for (const target of [...kadiv, ...kasubdiv]) addPair(ev.id, target.id);
+      // BPI menilai sesama BPI + semua KADIV + semua KASUBDIV
+      const otherBpi = bpi.filter((b) => b.id !== ev.id);
+      for (const target of [...otherBpi, ...kadiv, ...kasubdiv]) addPair(ev.id, target.id);
 
     } else if (ev.role === "KADIV") {
       // KADIV menilai BPI + ANGGOTA sedivisi + KASUBDIV sedivisi

@@ -100,20 +100,23 @@ export const addPanitiaSchema = z.object({
 });
 
 const hierarchyRoleEnum = z.enum(["BPI", "KADIV", "KASUBDIV", "ANGGOTA"]);
+const indicatorEventTypeEnum = z.enum(["PERIODIC", "PROKER"]);
 
-export const createIndicatorSchema = z.object({
+const baseIndicatorSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
-  evaluatorRole: hierarchyRoleEnum,
-  evaluateeRole: hierarchyRoleEnum,
+  eventType: indicatorEventTypeEnum,
+  evaluatorRole: hierarchyRoleEnum.optional().nullable(),
+  evaluateeRole: hierarchyRoleEnum.optional().nullable(),
   isActive: z.coerce.boolean().optional().default(true),
+}).superRefine((data, ctx) => {
+  if (data.eventType === "PERIODIC") {
+    if (!data.evaluatorRole) ctx.addIssue({ code: "custom", path: ["evaluatorRole"], message: "Wajib diisi untuk indikator periodik" });
+    if (!data.evaluateeRole) ctx.addIssue({ code: "custom", path: ["evaluateeRole"], message: "Wajib diisi untuk indikator periodik" });
+  }
 });
 
-export const updateIndicatorSchema = z.object({
-  name: z.string().min(1, "Nama wajib diisi"),
-  evaluatorRole: hierarchyRoleEnum,
-  evaluateeRole: hierarchyRoleEnum,
-  isActive: z.coerce.boolean().optional().default(true),
-});
+export const createIndicatorSchema = baseIndicatorSchema;
+export const updateIndicatorSchema = baseIndicatorSchema;
 
 export const createEventSchema = z
   .object({

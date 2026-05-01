@@ -61,7 +61,10 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     try {
       await db.insert(usersTable).values({ id: crypto.randomUUID(), ...data, passwordHash });
     } catch (error: any) {
-      if (error?.code === "ER_DUP_ENTRY" || error?.message?.includes("Duplicate entry")) {
+      if (isRedirectError(error)) throw error;
+      const pgCode = error?.code ?? error?.cause?.code;
+      const msg = String(error?.message ?? "") + " " + String(error?.cause?.message ?? "");
+      if (pgCode === "23505" || msg.includes("user_nim_unique") || msg.toLowerCase().includes("duplicate key")) {
         redirect(`/dashboard/users?success=${encodeURIComponent("NIM sudah digunakan")}&alert=error`);
       }
       throw error;
@@ -154,7 +157,10 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       revalidatePath("/dashboard/users");
       redirect(`/dashboard/users?success=${encodeURIComponent("User diperbarui")}&alert=success`);
     } catch (error: any) {
-      if (error?.code === "ER_DUP_ENTRY" || error?.message?.includes("Duplicate entry")) {
+      if (isRedirectError(error)) throw error;
+      const pgCode = error?.code ?? error?.cause?.code;
+      const msg = String(error?.message ?? "") + " " + String(error?.cause?.message ?? "");
+      if (pgCode === "23505" || msg.includes("user_nim_unique") || msg.toLowerCase().includes("duplicate key")) {
         redirect(`/dashboard/users?success=${encodeURIComponent("NIM sudah digunakan")}&alert=error`);
       }
       throw error;

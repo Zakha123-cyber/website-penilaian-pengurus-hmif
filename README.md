@@ -216,6 +216,5 @@ npm run db:seed
 ## Catatan
 
 - Role `KASUBDIV` hanya tersedia untuk divisi **Mediatek** dan **Humas**
-- Field **Subdivisi** pada form user hanya muncul saat divisi Mediatek atau Humas dipilih
 - Indikator penilaian dibedakan antara **Periodik** (per pasangan hierarki) dan **Proker** (general)
 - Password default dapat diubah di `.env` sebelum menjalankan seed
